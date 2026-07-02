@@ -7,7 +7,7 @@ package annotator
 import (
 	"context"
 
-	"github.com/compgenlab/vant/internal/model"
+	"github.com/compgenlab/cgvant/internal/model"
 )
 
 // Annotator computes annotation rows for a set of loci. Implementations must be

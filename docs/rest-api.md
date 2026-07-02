@@ -1,12 +1,12 @@
 # REST API
 
 > **Status: planned — not yet implemented.** This page is a placeholder for the annotation
-> service API. vant is a CLI today; the REST endpoint below describes the intended shape so
+> service API. cgvant is a CLI today; the REST endpoint below describes the intended shape so
 > the design is on record.
 
 ## Planned model
 
-A vant annotation server will expose the same annotation engine over HTTP, backed by the
+A cgvant annotation server will expose the same annotation engine over HTTP, backed by the
 same snapshot config and cache. Annotation can be expensive (external tools, large
 lookups), so the endpoint is designed to be **asynchronous**:
 

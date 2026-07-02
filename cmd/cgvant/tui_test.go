@@ -3,7 +3,7 @@ package main
 import (
 	"testing"
 
-	"github.com/compgenlab/vant/internal/config"
+	"github.com/compgenlab/cgvant/internal/config"
 )
 
 func TestMissingSourceFields(t *testing.T) {

@@ -1,12 +1,12 @@
-// Command vant is the interactive CLI for variant annotation.
+// Command cgvant is the interactive CLI for variant annotation.
 //
 // Usage:
 //
-//	vant [-home DIR] [-snapshot NAME] <command> [args]
+//	cgvant [-home DIR] [-snapshot NAME] <command> [args]
 //
-// VANT_HOME (the -home flag, else $VANT_HOME, else the current directory)
+// CGVANT_HOME (the -home flag, else $CGVANT_HOME, else the current directory)
 // is the base directory holding config.toml; config values may reference it as
-// $VANT_HOME (e.g. data_dir = "$VANT_HOME/data"). Sources and snapshot manifests
+// $CGVANT_HOME (e.g. data_dir = "$CGVANT_HOME/data"). Sources and snapshot manifests
 // live under annotations_dir (sources/, snapshots/). A source is a data file, a
 // type="builtin" bundle, or a type="tool" external annotator.
 //
@@ -39,16 +39,16 @@ import (
 	"strconv"
 	"strings"
 
-	annotatepkg "github.com/compgenlab/vant/internal/annotate"
-	"github.com/compgenlab/vant/internal/annotator"
-	"github.com/compgenlab/vant/internal/annotator/overlay"
-	"github.com/compgenlab/vant/internal/config"
-	"github.com/compgenlab/vant/internal/engine"
-	"github.com/compgenlab/vant/internal/fetch"
-	"github.com/compgenlab/vant/internal/model"
-	"github.com/compgenlab/vant/internal/store"
-	"github.com/compgenlab/vant/internal/store/sqlite"
-	"github.com/compgenlab/vant/internal/vcf"
+	annotatepkg "github.com/compgenlab/cgvant/internal/annotate"
+	"github.com/compgenlab/cgvant/internal/annotator"
+	"github.com/compgenlab/cgvant/internal/annotator/overlay"
+	"github.com/compgenlab/cgvant/internal/config"
+	"github.com/compgenlab/cgvant/internal/engine"
+	"github.com/compgenlab/cgvant/internal/fetch"
+	"github.com/compgenlab/cgvant/internal/model"
+	"github.com/compgenlab/cgvant/internal/store"
+	"github.com/compgenlab/cgvant/internal/store/sqlite"
+	"github.com/compgenlab/cgvant/internal/vcf"
 )
 
 // version is stamped at build time via -ldflags "-X main.version=…".
@@ -61,13 +61,13 @@ func main() {
 	}
 }
 
-// resolveHome returns VANT_HOME: the --home flag, else $VANT_HOME, else the
+// resolveHome returns CGVANT_HOME: the --home flag, else $CGVANT_HOME, else the
 // current directory; resolved to an absolute path. It exports the result back to
-// the environment so $VANT_HOME references inside config.toml resolve.
+// the environment so $CGVANT_HOME references inside config.toml resolve.
 func resolveHome(flagHome string) string {
 	home := flagHome
 	if home == "" {
-		home = os.Getenv("VANT_HOME")
+		home = os.Getenv("CGVANT_HOME")
 	}
 	if home == "" {
 		home = "."
@@ -75,13 +75,13 @@ func resolveHome(flagHome string) string {
 	if abs, err := filepath.Abs(home); err == nil {
 		home = abs
 	}
-	os.Setenv("VANT_HOME", home)
+	os.Setenv("CGVANT_HOME", home)
 	return home
 }
 
 func run(args []string) error {
-	fs := flag.NewFlagSet("vant", flag.ContinueOnError)
-	home := fs.String("home", "", "vant home dir (default: $VANT_HOME or CWD); holds config.toml")
+	fs := flag.NewFlagSet("cgvant", flag.ContinueOnError)
+	home := fs.String("home", "", "cgvant home dir (default: $CGVANT_HOME or CWD); holds config.toml")
 	snapshotName := fs.String("snapshot", "", "snapshot to use (default: config default_snapshot)")
 	fs.Usage = usage
 	if err := fs.Parse(args); err != nil {
@@ -98,7 +98,7 @@ func run(args []string) error {
 	ctx := context.Background()
 
 	if cmd == "version" {
-		fmt.Println("vant", version)
+		fmt.Println("cgvant", version)
 		return nil
 	}
 
@@ -143,12 +143,12 @@ func run(args []string) error {
 }
 
 func usage() {
-	fmt.Fprint(os.Stderr, `vant — variant annotation CLI
+	fmt.Fprint(os.Stderr, `cgvant — variant annotation CLI
 
-usage: vant [-home DIR] [-snapshot NAME] <command> [args]
+usage: cgvant [-home DIR] [-snapshot NAME] <command> [args]
 
-VANT_HOME (-home flag, else $VANT_HOME, else CWD) is the base dir holding
-config.toml; config values may reference it, e.g. data_dir = "$VANT_HOME/data".
+CGVANT_HOME (-home flag, else $CGVANT_HOME, else CWD) is the base dir holding
+config.toml; config values may reference it, e.g. data_dir = "$CGVANT_HOME/data".
 
 config commands:
   init                         scaffold config.toml + a starter snapshot
@@ -166,7 +166,7 @@ annotation commands:
   annotate [--all|-a name,...] [--format tab|vcf|json|text] [-o FILE] <vcf|locus...>
                                annotate loci (default format: tab; -o writes to a file)
   versions                     show the active snapshot
-  version                      print the vant version
+  version                      print the cgvant version
 `)
 }
 
@@ -348,7 +348,7 @@ func cmdAnnotate(ctx context.Context, cfgPath, snapshot string, args []string) e
 				return err
 			}
 		}
-		workdir, err := os.MkdirTemp("", "vant-loci-tools-")
+		workdir, err := os.MkdirTemp("", "cgvant-loci-tools-")
 		if err != nil {
 			return err
 		}
@@ -424,7 +424,7 @@ func annotateInputVCF(rest []string) (string, func(), error) {
 	if err != nil {
 		return "", noop, err
 	}
-	tmp, err := os.CreateTemp("", "vant-in-*.vcf")
+	tmp, err := os.CreateTemp("", "cgvant-in-*.vcf")
 	if err != nil {
 		return "", noop, err
 	}
@@ -555,7 +555,7 @@ func requireSources(cfg *config.Config, snap *config.Snapshot, anns []config.Ann
 		}
 	}
 	if len(problems) > 0 {
-		return fmt.Errorf("sources not downloaded — run `vant download`:\n  %s", strings.Join(problems, "\n  "))
+		return fmt.Errorf("sources not downloaded — run `cgvant download`:\n  %s", strings.Join(problems, "\n  "))
 	}
 	return nil
 }

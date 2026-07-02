@@ -1,37 +1,37 @@
 # Overview & config model
 
-vant is config-driven: you declare **sources** and the **annotations** they expose in
+cgvant is config-driven: you declare **sources** and the **annotations** they expose in
 TOML, group them into a **snapshot**, then annotate against that snapshot. Nothing about
 adding a new annotation requires code.
 
-## VANT_HOME and config.toml
+## CGVANT_HOME and config.toml
 
-`VANT_HOME` is the base directory holding `config.toml`. It is chosen as, in order:
-the `-home DIR` flag, else `$VANT_HOME`, else the current directory. Config values may
-reference `$VANT_HOME` (e.g. `data_dir = "$VANT_HOME/data"`), so data, cache, and the
-annotations tree all live under the home no matter where you run vant from.
+`CGVANT_HOME` is the base directory holding `config.toml`. It is chosen as, in order:
+the `-home DIR` flag, else `$CGVANT_HOME`, else the current directory. Config values may
+reference `$CGVANT_HOME` (e.g. `data_dir = "$CGVANT_HOME/data"`), so data, cache, and the
+annotations tree all live under the home no matter where you run cgvant from.
 
 ```toml
 # config.toml
-data_dir         = "$VANT_HOME/data"        # base for relative `localpath` files
-cache_dir        = "$VANT_HOME/data/cache"  # downloaded sources + tool images/data
+data_dir         = "$CGVANT_HOME/data"        # base for relative `localpath` files
+cache_dir        = "$CGVANT_HOME/data/cache"  # downloaded sources + tool images/data
 default_snapshot = "2026-07"
 annotations_dir  = "./annotations"           # root for sources/ and snapshots/
 
 [database]                                   # OPTIONAL — omit to skip the cache entirely
 backend = "sqlite"
-path    = "$VANT_HOME/vant.db"
+path    = "$CGVANT_HOME/cgvant.db"
 
 [references.GRCh38]                           # reference FASTAs, keyed by assembly
 fasta = "/data/ref/GRCh38.fa"
 ```
 
-Run `vant init` to generate a starter `config.toml` (it prompts for the annotations
+Run `cgvant init` to generate a starter `config.toml` (it prompts for the annotations
 directory and the starter snapshot name) plus a `sources/` tree and a snapshot manifest.
 
 ## The annotations tree
 
-Under `annotations_dir`, vant keeps reusable **sources** and the **snapshot manifests**
+Under `annotations_dir`, cgvant keeps reusable **sources** and the **snapshot manifests**
 that reference them. Versioned directories mirror the registry 1:1, so multiple versions
 coexist and local↔registry paths match:
 
@@ -48,7 +48,7 @@ annotations tree.)
 
 ## Snapshot
 
-A **snapshot** is the unit `vant annotate` runs against, and the version stamped on
+A **snapshot** is the unit `cgvant annotate` runs against, and the version stamped on
 results. It is a manifest file that references sources by `name:version` and carries the
 snapshot-scoped settings:
 
@@ -70,7 +70,7 @@ default_annotations = ["clinvar_sig", "gnomad_af", "vep_consequence"]
   `--all`/`-a`. Managed here (not on the source), so one source can be default in one
   snapshot and opt-in in another.
 
-Manage snapshots with `vant snapshot add|list`, or interactively with `vant configure`
+Manage snapshots with `cgvant snapshot add|list`, or interactively with `cgvant configure`
 (a TUI with checkbox editors for a snapshot's member sources and default annotations).
 
 ## Annotation
@@ -88,15 +88,15 @@ id, a BED/TSV column, `@ID`, or a GTF field). `field` defaults to `name`.
 | `numeric` | a float, stored numerically; a non-numeric value is dropped for that locus |
 | `flag` | presence only, no value; `field` is ignored |
 
-Add annotations with `vant annotation add --source <name:version> --name … --field …`,
-or in the TUI. `vant annotation list <snapshot>` shows every annotation with the default
+Add annotations with `cgvant annotation add --source <name:version> --name … --field …`,
+or in the TUI. `cgvant annotation list <snapshot>` shows every annotation with the default
 set marked `*`.
 
 ## The cache
 
 The annotation cache is an **optional** SQLite table that memoizes computed values, keyed
-by **assembly + locus + source `name:version`**. Omit the `[database]` block and vant
-computes without persisting (no `vant.db` is written); add it to memoize so repeat
+by **assembly + locus + source `name:version`**. Omit the `[database]` block and cgvant
+computes without persisting (no `cgvant.db` is written); add it to memoize so repeat
 lookups are instant and expensive tools run only on novel loci.
 
 The cache keys on the *locus*, not the annotation set: once a locus is cached it is

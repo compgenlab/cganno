@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""convert_csv_to_tab.py — REVEL CSV → tab converter for vant's build pipeline.
+"""convert_csv_to_tab.py — REVEL CSV → tab converter for cgvant's build pipeline.
 
 >>> PLACEHOLDER <<< Replace this with the real converter.
 
-vant runs it as:   python3 convert_csv_to_tab.py <segments>/*.csv | bgzip > {output}
+cgvant runs it as:   python3 convert_csv_to_tab.py <segments>/*.csv | bgzip > {output}
 then indexes with:  tabix -s 1 -b 2 -e 2 -S 1 {output}
 
 So this must read the REVEL CSV segment files (given as argv) and write a

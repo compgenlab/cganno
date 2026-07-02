@@ -1,6 +1,6 @@
 # Source types
 
-Everything vant annotates from is a **source**, identified `name:version` and living at
+Everything cgvant annotates from is a **source**, identified `name:version` and living at
 `sources/<name>/<version>/<name>-<version>.toml`. A source is discriminated by its
 `type` field:
 
@@ -42,7 +42,7 @@ checksum_index = "md5:…"
 - **`url` vs `localpath`:** `url`/`url_index` are the canonical reference kept for
   provenance and the registry; `localpath`/`localpath_index` are this machine's files —
   when `localpath` is set the file is used exactly and never downloaded. Environment
-  variables (`${VAR}`, `$VANT_HOME`) are expanded in `localpath`. `registry submit`
+  variables (`${VAR}`, `$CGVANT_HOME`) are expanded in `localpath`. `registry submit`
   strips `localpath`.
 - **`checksum`/`checksum_index`** are optional (`md5`|`sha1`|`sha256`); verified while
   downloading when present. The value may be a URL to a checksum file.
@@ -72,7 +72,7 @@ One source can span several files, all queried and merged:
   `BIOTYPE`, `REGION`, `CODING`, `NONCODING`. `gtf_tags = [...]` restricts to features
   carrying every listed tag (e.g. `"basic"` for the GENCODE basic set).
 
-**Chromosome naming is auto-converted:** vant builds a converter from the source file's
+**Chromosome naming is auto-converted:** cgvant builds a converter from the source file's
 own reference names, so input/source naming (Ensembl `1` / UCSC `chr1` / NCBI
 `NC_000001.11`) is matched automatically.
 
@@ -100,7 +100,7 @@ type = "builtin"
 ```
 
 Builtins emit `CG_*` INFO tags. They are **only applied in the VCF pipeline** — i.e.
-`vant annotate --format vcf` (or `-o out.vcf`). The engine/overlay path used by
+`cgvant annotate --format vcf` (or `-o out.vcf`). The engine/overlay path used by
 `--format tab|json|text` does not run builtins.
 
 | builtin | tag | needs samples? | notes |
@@ -125,7 +125,7 @@ bare loci).
 ## Tool sources (`type = "tool"`)
 
 A tool source is an external, often containerized annotator (VEP, ANNOVAR, a custom
-script) that runs **per query**: vant hands it the query variants, it produces an output
+script) that runs **per query**: cgvant hands it the query variants, it produces an output
 file, and that output is consumed exactly like a data source of its `format`.
 
 ```toml

@@ -1,4 +1,4 @@
-// Package fetch implements `vant download`: fetching a snapshot's configured
+// Package fetch implements `cgvant download`: fetching a snapshot's configured
 // sources into the cache (one file at a time) and ensuring each is tabix-indexed
 // (reuse a published .tbi/.csi, else build one via hts tabix.IndexWriter). A
 // source with a `localpath` is used exactly and never downloaded; checksums are
@@ -20,10 +20,10 @@ import (
 	"github.com/compgenlab/hts/htsio/tabix"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/compgenlab/vant/internal/checksum"
-	"github.com/compgenlab/vant/internal/config"
-	"github.com/compgenlab/vant/internal/software"
-	"github.com/compgenlab/vant/internal/tool"
+	"github.com/compgenlab/cgvant/internal/checksum"
+	"github.com/compgenlab/cgvant/internal/config"
+	"github.com/compgenlab/cgvant/internal/software"
+	"github.com/compgenlab/cgvant/internal/tool"
 )
 
 // Result reports what happened for one source.
@@ -36,7 +36,7 @@ type Result struct {
 // fileResult is the per-file outcome (data + index status).
 type fileResult struct{ data, index string }
 
-// logWriter receives `vant download` progress lines (set to io.Discard for --quiet).
+// logWriter receives `cgvant download` progress lines (set to io.Discard for --quiet).
 var logWriter io.Writer = os.Stderr
 
 // SetLogWriter redirects fetch's progress logging (default os.Stderr).
@@ -155,7 +155,7 @@ func buildSource(ctx context.Context, cfg *config.Config, src config.Source, for
 	}
 
 	logf("%s: building source", src.ID())
-	work, err := os.MkdirTemp("", "vant-build-")
+	work, err := os.MkdirTemp("", "cgvant-build-")
 	if err != nil {
 		return Result{}, err
 	}
@@ -315,14 +315,14 @@ func setupToolSource(ctx context.Context, cfg *config.Config, src config.Source,
 	// Run setup once (sentinel-gated).
 	if len(t.Setup) > 0 {
 		datadir := cfg.ResolveToolData(t)
-		sentinel := filepath.Join(datadir, ".vant-setup-done")
+		sentinel := filepath.Join(datadir, ".cgvant-setup-done")
 		if fileExists(sentinel) && !force {
 			res.Index = "setup: skipped"
 		} else {
 			if err := os.MkdirAll(datadir, 0o755); err != nil {
 				return res, err
 			}
-			wd, err := os.MkdirTemp("", "vant-setup-")
+			wd, err := os.MkdirTemp("", "cgvant-setup-")
 			if err != nil {
 				return res, err
 			}

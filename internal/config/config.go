@@ -16,8 +16,8 @@ import (
 
 	"github.com/BurntSushi/toml"
 
-	"github.com/compgenlab/vant/internal/checksum"
-	"github.com/compgenlab/vant/internal/model"
+	"github.com/compgenlab/cgvant/internal/checksum"
+	"github.com/compgenlab/cgvant/internal/model"
 )
 
 // decodeFragment decodes one snapshot fragment file with debug-friendly errors:
@@ -77,11 +77,11 @@ type Config struct {
 
 // DefaultRegistry is the built-in registry used when none is configured. A
 // registry is just a static HTTPS registry.toml (any host works).
-const DefaultRegistry = "https://raw.githubusercontent.com/compgenlab/vant-public-data-registry/main/registry.toml"
+const DefaultRegistry = "https://raw.githubusercontent.com/compgenlab/cgvant-public-data-registry/main/registry.toml"
 
 // DefaultRegistryRepo is the GitHub repo (owner/name) that `registry submit`
 // targets. Submission is GitHub-specific and only works against this repo.
-const DefaultRegistryRepo = "compgenlab/vant-public-data-registry"
+const DefaultRegistryRepo = "compgenlab/cgvant-public-data-registry"
 
 // RegistryLocations returns the effective registries to search, in order:
 // the explicit `registries` list, else the legacy single `registry_url`, else
@@ -110,7 +110,7 @@ type Reference struct {
 
 // ReferenceFor returns the reference FASTA configured for an assembly (from
 // `[references.<assembly>]`), or "" if none. Config values are already
-// $VANT_HOME-expanded at Load time.
+// $CGVANT_HOME-expanded at Load time.
 func (c *Config) ReferenceFor(assembly string) string {
 	return c.References[assembly].Fasta
 }
@@ -206,13 +206,13 @@ type Source struct {
 	GTFTags []string `toml:"gtf_tags,omitempty"`
 
 	// Build, when set, produces this source's data file from a download+preprocess
-	// recipe instead of a ready-to-use url/localpath. Run once by `vant download`
+	// recipe instead of a ready-to-use url/localpath. Run once by `cgvant download`
 	// and cached. Mutually exclusive with url/localpath/files/chroms.
 	Build *SourceBuild `toml:"build,omitempty"`
 
 	// Requires lists external executables that must be on PATH for this source's
 	// build recipe (or type="tool" steps) to run (e.g. "python3", "unzip"). Checked
-	// by `vant download`/`vant annotate`. Irrelevant for plain (non-build) sources.
+	// by `cgvant download`/`cgvant annotate`. Irrelevant for plain (non-build) sources.
 	Requires []string `toml:"requires,omitempty"`
 
 	// --- type="tool" only: an external annotator run per-query (see AsTool) -------
@@ -259,7 +259,7 @@ func (s Source) AsTool() Tool {
 // SourceBuild is a preprocessing recipe that produces a source's data file — for
 // sources that need significant prep (e.g. REVEL: download many CSV zips, convert,
 // merge, index). Because it lives in the fragment, such a source is self-contained
-// and registry-shareable. `vant download` fetches Inputs + Assets into a scratch
+// and registry-shareable. `cgvant download` fetches Inputs + Assets into a scratch
 // workdir, runs the Run steps (which must write {output}), then caches + indexes
 // the result. Step placeholders: {workdir} {inputs} {output} {threads}.
 type SourceBuild struct {
@@ -397,7 +397,7 @@ type Tool struct {
 	RefCol      int    `toml:"ref_col,omitempty"`      // tab output: 1-based REF column
 	AltCol      int    `toml:"alt_col,omitempty"`      // tab output: 1-based ALT column
 
-	// Setup runs once after the image is acquired (`vant download`) to install the
+	// Setup runs once after the image is acquired (`cgvant download`) to install the
 	// tool's data into its data dir ({datadir}, bound into container steps).
 	Setup  []Step    `toml:"setup,omitempty"`
 	Runner string    `toml:"runner,omitempty"` // "local" (subprocess) | "batch" (submit template)
@@ -405,7 +405,7 @@ type Tool struct {
 	Steps  []Step    `toml:"steps"`
 
 	// Requires lists external executables that must be on PATH for this tool to
-	// run (e.g. "python3", "bgzip"). Checked by `vant download` and `vant
+	// run (e.g. "python3", "bgzip"). Checked by `cgvant download` and `cgvant
 	// annotate` before any step runs. The container engine is checked
 	// automatically when the tool uses a container — see RequiredSoftware.
 	Requires []string `toml:"requires,omitempty"`
@@ -686,7 +686,7 @@ func (snap *Snapshot) DropSource(name string) int {
 }
 
 // Load reads and validates the global config.toml. Values may reference
-// $VANT_HOME / ${VANT_HOME}, which is expanded to the VANT_HOME env var
+// $CGVANT_HOME / ${CGVANT_HOME}, which is expanded to the CGVANT_HOME env var
 // (or "." when unset) before decoding. Other $NAME sequences are left intact.
 func Load(path string) (*Config, error) {
 	var c Config
@@ -694,12 +694,12 @@ func Load(path string) (*Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read config %s: %w", path, err)
 	}
-	home := os.Getenv("VANT_HOME")
+	home := os.Getenv("CGVANT_HOME")
 	if home == "" {
 		home = "."
 	}
 	expand := func(name string) string {
-		if name == "VANT_HOME" {
+		if name == "CGVANT_HOME" {
 			return home
 		}
 		return "${" + name + "}" // leave other vars intact
@@ -711,9 +711,9 @@ func Load(path string) (*Config, error) {
 		c.dir = filepath.Dir(abs)
 	}
 	// The cache is optional: an absent [database] leaves the backend empty (disabled),
-	// so no vant.db is created. Only a configured backend defaults its path.
+	// so no cgvant.db is created. Only a configured backend defaults its path.
 	if c.Database.Backend == "sqlite" && c.Database.Path == "" {
-		c.Database.Path = "vant.db"
+		c.Database.Path = "cgvant.db"
 	}
 	if c.AnnotationsDir == "" {
 		c.AnnotationsDir = "annotations"
@@ -1119,7 +1119,7 @@ func (c *Config) resolveDir(d string) string {
 // DataDirAbs is data_dir resolved relative to the config file.
 func (c *Config) DataDirAbs() string { return c.resolveDir(c.DataDir) }
 
-// DatabasePathAbs is database.path resolved relative to VANT_HOME (the config
+// DatabasePathAbs is database.path resolved relative to CGVANT_HOME (the config
 // dir) for sqlite; an absolute path or a postgres DSN is returned unchanged.
 func (c *Config) DatabasePathAbs() string {
 	if c.Database.Backend != "sqlite" {
@@ -1145,7 +1145,7 @@ func (c *Config) CacheDirAbs() string {
 // ResolveSourcePath returns the on-disk path to a source's data file. A LocalPath
 // (absolute, or relative to data_dir) wins — the file is used exactly. Otherwise
 // the file is cached under cache_dir keyed by name/version. Environment variables
-// in a localpath (`$VAR` / `${VAR}`, incl. $VANT_HOME) are expanded here at
+// in a localpath (`$VAR` / `${VAR}`, incl. $CGVANT_HOME) are expanded here at
 // resolve time, so the raw value stays in the fragment file.
 func (c *Config) ResolveSourcePath(s Source) string {
 	if s.LocalPath != "" {
@@ -1207,7 +1207,7 @@ func (c *Config) ResolveToolData(t Tool) string {
 // MustExist returns a helpful error if the config file is missing.
 func MustExist(path string) error {
 	if _, err := os.Stat(path); err != nil {
-		return fmt.Errorf("config file %s not found (run `vant init`)", path)
+		return fmt.Errorf("config file %s not found (run `cgvant init`)", path)
 	}
 	return nil
 }
@@ -1223,8 +1223,8 @@ func ReadFragment(path string) (*Snapshot, error) {
 	return snap, nil
 }
 
-// ReadConfigFile decodes config.toml WITHOUT expanding $VANT_HOME, so the raw
-// values (e.g. "$VANT_HOME/data") round-trip when edited and rewritten. Use Load
+// ReadConfigFile decodes config.toml WITHOUT expanding $CGVANT_HOME, so the raw
+// values (e.g. "$CGVANT_HOME/data") round-trip when edited and rewritten. Use Load
 // for a resolved, validated config to run against.
 func ReadConfigFile(path string) (*Config, error) {
 	var c Config

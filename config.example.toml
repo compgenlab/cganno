@@ -1,6 +1,6 @@
-# Global vant config. Run `vant init` to generate this plus a starter snapshot.
+# Global cgvant config. Run `cgvant init` to generate this plus a starter snapshot.
 #
-# Under annotations_dir, vant keeps reusable sources plus the snapshot manifests
+# Under annotations_dir, cgvant keeps reusable sources plus the snapshot manifests
 # that reference them. A source is a data file, a type="builtin" bundle, or a
 # type="tool" external annotator — all under sources/:
 #
@@ -11,29 +11,29 @@
 # A snapshot is the unit `annotate` runs against and the version stamped on results.
 # See examples/ for a fully worked tree.
 #
-# This file lives in VANT_HOME (the -home flag, else $VANT_HOME, else the current
-# directory). Values may reference $VANT_HOME, which expands to that base dir (or
+# This file lives in CGVANT_HOME (the -home flag, else $CGVANT_HOME, else the current
+# directory). Values may reference $CGVANT_HOME, which expands to that base dir (or
 # "." when unset). Relative paths also resolve against this file.
 
-data_dir         = "$VANT_HOME/data"        # base dir for relative `localpath` source files
-cache_dir        = "$VANT_HOME/data/cache"  # downloaded sources + tool images/data cached here,
+data_dir         = "$CGVANT_HOME/data"        # base dir for relative `localpath` source files
+cache_dir        = "$CGVANT_HOME/data/cache"  # downloaded sources + tool images/data cached here,
                                              # keyed by name/version (set absolute to share across homes)
 default_snapshot = "2026-06"
-annotations_dir  = "./annotations"           # root for sources/, snapshots/ (default: $VANT_HOME/annotations)
-# Config registries for `vant registry` — each is a static HTTPS registry.toml URL.
-# When unset, the built-in default (compgenlab/vant-public-data-registry) is used.
+annotations_dir  = "./annotations"           # root for sources/, snapshots/ (default: $CGVANT_HOME/annotations)
+# Config registries for `cgvant registry` — each is a static HTTPS registry.toml URL.
+# When unset, the built-in default (compgenlab/cgvant-public-data-registry) is used.
 # registries = [
-#   "https://raw.githubusercontent.com/compgenlab/vant-public-data-registry/main/registry.toml",
+#   "https://raw.githubusercontent.com/compgenlab/cgvant-public-data-registry/main/registry.toml",
 #   "https://example.org/my-lab-registry/registry.toml",
 # ]
 
-# The annotation cache is OPTIONAL: omit the whole [database] block and vant
-# computes annotations without persisting them (no vant.db is written). Add it to
+# The annotation cache is OPTIONAL: omit the whole [database] block and cgvant
+# computes annotations without persisting them (no cgvant.db is written). Add it to
 # memoize results. Cached values are scoped by assembly + data source name:version,
 # so different snapshots share a cache safely and GRCh37/GRCh38 never collide.
 [database]
 backend = "sqlite"                # sqlite (default) | postgres (later)
-path    = "$VANT_HOME/vant.db"
+path    = "$CGVANT_HOME/cgvant.db"
 
 # Reference FASTAs, keyed by assembly. A snapshot's reference is looked up from its
 # assembly, so all snapshots on one assembly share a single FASTA (no per-snapshot

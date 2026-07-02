@@ -6,15 +6,15 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/compgenlab/vant/internal/config"
+	"github.com/compgenlab/cgvant/internal/config"
 )
 
-// newTestEditor builds an editModel over a fresh temp VANT_HOME with an empty
+// newTestEditor builds an editModel over a fresh temp CGVANT_HOME with an empty
 // snapshot "s". It drives the model's data methods directly (no TTY/rendering).
 func newTestEditor(t *testing.T) *editModel {
 	t.Helper()
 	dir := t.TempDir()
-	t.Setenv("VANT_HOME", dir)
+	t.Setenv("CGVANT_HOME", dir)
 	cfgPath := filepath.Join(dir, "config.toml")
 	body := "data_dir = \"data\"\nannotations_dir = \".\"\ndefault_snapshot = \"s\"\n"
 	if err := os.WriteFile(cfgPath, []byte(body), 0o644); err != nil {
@@ -182,7 +182,7 @@ func TestEditorViewRenders(t *testing.T) {
 	m.width, m.height = 90, 24
 	m.toSnapshots()
 	out := m.View()
-	for _, want := range []string{"vant", "snapshots", "quit"} {
+	for _, want := range []string{"cgvant", "snapshots", "quit"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("snapshots view missing %q", want)
 		}
@@ -191,7 +191,7 @@ func TestEditorViewRenders(t *testing.T) {
 	m.startNewSource()
 	m.toSourceForm()
 	out = m.View()
-	for _, want := range []string{"vant", "source", "name"} {
+	for _, want := range []string{"cgvant", "source", "name"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("source form missing %q", want)
 		}

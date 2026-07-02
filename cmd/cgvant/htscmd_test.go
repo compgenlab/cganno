@@ -14,7 +14,7 @@ const tabixVCF = "##fileformat=VCFv4.2\n" +
 	"chr1\t200\t.\tC\tT\t.\t.\t.\n" +
 	"chr2\t50\t.\tG\tA\t.\t.\t.\n"
 
-// TestBgzipAndTabix: `vant bgzip` compresses a file to a BGZF file, and `vant tabix`
+// TestBgzipAndTabix: `cgvant bgzip` compresses a file to a BGZF file, and `cgvant tabix`
 // indexes it; the result opens as a valid tabix-indexed file.
 func TestBgzipAndTabix(t *testing.T) {
 	dir := t.TempDir()
@@ -47,7 +47,7 @@ func TestBgzipAndTabix(t *testing.T) {
 	r.Close()
 }
 
-// TestBgzipMergedIndex: `vant bgzip -o FILE -p vcf` writes the BGZF file AND its
+// TestBgzipMergedIndex: `cgvant bgzip -o FILE -p vcf` writes the BGZF file AND its
 // tabix index in one step; explicit columns work too.
 func TestBgzipMergedIndex(t *testing.T) {
 	dir := t.TempDir()

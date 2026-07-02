@@ -1,7 +1,7 @@
-# vant-public-data-registry
+# cgvant-public-data-registry
 
-A catalog of **annotation source/snapshot configs** for [vant](https://github.com/compgenlab/vant).
-It holds *configurations, not data* — `vant download` fetches the actual files.
+A catalog of **annotation source/snapshot configs** for [cgvant](https://github.com/compgenlab/cgvant).
+It holds *configurations, not data* — `cgvant download` fetches the actual files.
 
 ## Layout
 
@@ -11,7 +11,7 @@ sources/<name>/<ver>/<name>-<ver>.toml     one source's config snippet (a source
 snapshots/<name>.toml                      a full snapshot bundle (references sources by name:version)
 ```
 
-`registry.toml` is served over HTTPS (GitHub raw, Pages, S3 — anywhere). vant
+`registry.toml` is served over HTTPS (GitHub raw, Pages, S3 — anywhere). cgvant
 points at its URL; entry `file` paths resolve relative to it — so the on-disk name is
 free (the layout above is just the convention). Versions are tags: `add-source
 clinvar:2026-01`, or `clinvar` / `clinvar:latest` for the entry marked `latest = true`
@@ -20,15 +20,15 @@ clinvar:2026-01`, or `clinvar` / `clinvar:latest` for the entry marked `latest =
 ## Consuming it
 
 ```sh
-vant registry list                                          # uses this registry by default
-vant registry add-source clinvar:2026-01 --snapshot 2026-07 # add one source to a snapshot
-vant registry add-source vep:113 --snapshot 2026-07         # a tool source works the same way
-vant registry pull-snapshot 2026-07                         # or pull a whole snapshot (+ its sources)
+cgvant registry list                                          # uses this registry by default
+cgvant registry add-source clinvar:2026-01 --snapshot 2026-07 # add one source to a snapshot
+cgvant registry add-source vep:113 --snapshot 2026-07         # a tool source works the same way
+cgvant registry pull-snapshot 2026-07                         # or pull a whole snapshot (+ its sources)
 ```
 
 ## Contributing a source or tool
 
-Run `vant registry submit <name[:version]>` (needs a `public_repo`
+Run `cgvant registry submit <name[:version]>` (needs a `public_repo`
 `GITHUB_TOKEN`), or open an issue with the **`source-submission`** label and the
 config in a ` ```toml ` block. Submissions are always `[[sources]]` fragments — a tool is
 just a `type = "tool"` source. A submitted data source **must declare a `checksum`**

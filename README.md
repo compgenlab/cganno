@@ -1,15 +1,15 @@
-# vant
+# cgvant
 
 **Fast, no-fuss variant annotation from the command line.**
 
-`vant` annotates VCF files (and bare loci) against a *versioned* bundle of reference
+`cgvant` annotates VCF files (and bare loci) against a *versioned* bundle of reference
 sources — gene model, ClinVar significance, gnomAD allele frequencies, CADD/REVEL
 scores, your own BED/VCF/TSV tracks, or external tools like VEP — and caches the
 results so repeat work is instant. It's a single static Go binary: no Perl, no
 cache-install dance, no database server to stand up.
 
-> The name is short for **variant annotation**. Built-in annotations are emitted as
-> `CG_*` INFO tags (a [compgenlab](https://github.com/compgenlab) convention).
+> The name: `cg` for [compgenlab](https://github.com/compgenlab) + **variant**
+> annotation. Built-in annotations are emitted as `CG_*` INFO tags.
 
 ## Highlights
 
@@ -27,23 +27,23 @@ cache-install dance, no database server to stand up.
 Requires Go 1.25+.
 
 ```sh
-go install github.com/compgenlab/vant/cmd/vant@latest
+go install github.com/compgenlab/cgvant/cmd/cgvant@latest
 ```
 
 ## Quick start
 
 ```sh
-export VANT_HOME=~/vant                 # base dir for config, data, cache, and the DB
-vant init                                # scaffold config.toml + a starter snapshot
+export CGVANT_HOME=~/cgvant                 # base dir for config, data, cache, and the DB
+cgvant init                                # scaffold config.toml + a starter snapshot
 
 # add a source, reference it from the snapshot, then fetch the data:
-vant source add --name gnomad --version 4.1 --url https://… --format vcf --snapshot 2026-07
-vant annotation add --source gnomad:4.1 --name gnomad_af --field AF --type numeric
-vant download -j 4
+cgvant source add --name gnomad --version 4.1 --url https://… --format vcf --snapshot 2026-07
+cgvant annotation add --source gnomad:4.1 --name gnomad_af --field AF --type numeric
+cgvant download -j 4
 
 # annotate (default output is TSV; --format vcf|json|text, -o writes to a file):
-vant annotate chr1:115256529:T:C
-vant annotate --all --format vcf -o out.vcf in.vcf
+cgvant annotate chr1:115256529:T:C
+cgvant annotate --all --format vcf -o out.vcf in.vcf
 ```
 
 See the **[Quick start guide](docs/quickstart.md)** for a fuller walkthrough.
@@ -65,19 +65,19 @@ Full documentation lives in **[`docs/`](docs/README.md)**:
 
 Early but working: an interactive CLI on a SQLite backend. A Postgres backend and an
 asynchronous REST annotate endpoint are planned. Cohort-style filtering ("which loci are
-pathogenic *and* rare") is intentionally out of scope — vant produces the annotations; a
+pathogenic *and* rare") is intentionally out of scope — cgvant produces the annotations; a
 consumer filters them.
 
 ## Development
 
 ```sh
-make build      # bin/vant
+make build      # bin/cgvant
 make test       # go test -race ./...
 make vet
 make cross      # release tarballs (linux,darwin × amd64,arm64)
 ```
 
-Supported platforms: Linux and macOS on `amd64` and `arm64`. Because vant is pure Go,
+Supported platforms: Linux and macOS on `amd64` and `arm64`. Because cgvant is pure Go,
 `make cross` static-cross-compiles all four from any host with no C toolchain.
 
 ## License

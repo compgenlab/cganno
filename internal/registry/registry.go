@@ -1,6 +1,6 @@
 // Package registry fetches a remote catalog of source/snapshot configs over HTTP
 // (raw GitHub, no git dependency). The registry holds configurations, not data:
-// `vant download` fetches the actual files afterward. It is a convenience
+// `cgvant download` fetches the actual files afterward. It is a convenience
 // starting point — users own and edit their local snapshots.
 package registry
 
@@ -15,7 +15,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 
-	"github.com/compgenlab/vant/internal/config"
+	"github.com/compgenlab/cgvant/internal/config"
 )
 
 // Entry is one catalog item (a snapshot, source, or tool).

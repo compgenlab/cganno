@@ -7,7 +7,7 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	"github.com/compgenlab/vant/internal/model"
+	"github.com/compgenlab/cgvant/internal/model"
 )
 
 // SourceAnnotator annotates loci from a single source. The overlay package's

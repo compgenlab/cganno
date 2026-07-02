@@ -13,7 +13,7 @@ import (
 
 	"github.com/compgenlab/hts/htsio/tabix"
 
-	"github.com/compgenlab/vant/internal/config"
+	"github.com/compgenlab/cgvant/internal/config"
 )
 
 // sha256Spec returns the "sha256:<hex>" checksum spec for a file on disk.
@@ -357,7 +357,7 @@ func TestBuildSource(t *testing.T) {
 // directly) — guarding the bug where the errgroup's cancelled context leaked into
 // the post-Wait build pass ("context canceled").
 func TestSnapshotBuildSource(t *testing.T) {
-	t.Setenv("VANT_HOME", "")
+	t.Setenv("CGVANT_HOME", "")
 	base := t.TempDir()
 
 	// prebuilt indexed tab the build copies as {output}

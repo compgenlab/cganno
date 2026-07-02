@@ -11,9 +11,9 @@ import (
 
 	"github.com/compgenlab/hts/vcf"
 
-	"github.com/compgenlab/vant/internal/annotate"
-	"github.com/compgenlab/vant/internal/config"
-	"github.com/compgenlab/vant/internal/model"
+	"github.com/compgenlab/cgvant/internal/annotate"
+	"github.com/compgenlab/cgvant/internal/config"
+	"github.com/compgenlab/cgvant/internal/model"
 )
 
 // Source annotates loci from a tabix-indexed reference file (or per-chrom files).

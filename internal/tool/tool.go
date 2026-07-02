@@ -17,7 +17,7 @@ import (
 
 	"github.com/compgenlab/hts/htsio/tabix"
 
-	"github.com/compgenlab/vant/internal/config"
+	"github.com/compgenlab/cgvant/internal/config"
 )
 
 // Params carry the values substituted into step templates.
@@ -82,7 +82,7 @@ func Setup(ctx context.Context, t config.Tool, p Params) error {
 // stageAssets copies the tool's declared helper files (config.Tool.Assets, co-located
 // with the fragment in p.AssetDir) into the step workdir, so a step can reference one
 // as `{workdir}/<name>` — in host steps directly, and in container steps via the
-// workdir bind at /vant/work. Staged files are made executable. A missing asset is a
+// workdir bind at /cgvant/work. Staged files are made executable. A missing asset is a
 // clear error. No-op when the tool declares no assets.
 func stageAssets(t config.Tool, p Params) error {
 	for _, a := range t.Assets {
@@ -128,13 +128,13 @@ func replacer(t config.Tool, p Params) *strings.Replacer {
 }
 
 // ctrRoot is the fixed in-container mount root for container steps.
-const ctrRoot = "/vant"
+const ctrRoot = "/cgvant"
 
 // containerMapping binds each of p's host dirs to a fixed, shallow mountpoint under
 // ctrRoot and returns the template replacer (expanding placeholders to those
 // in-container paths) together with the matching `-B host:dest` flags. Decoupling
 // the in-container paths from the deep host paths means the engine only creates
-// shallow /vant/* mountpoints — which avoids the engine having to recreate a deep
+// shallow /cgvant/* mountpoints — which avoids the engine having to recreate a deep
 // host path inside a read-only image (the cause of INSTALL.pl "Could not create
 // directory" failures) and keeps a registry tool's commands host-independent.
 func containerMapping(t config.Tool, p Params) (*strings.Replacer, []string) {
@@ -181,7 +181,7 @@ func containerMapping(t config.Tool, p Params) (*strings.Replacer, []string) {
 }
 
 func runStep(ctx context.Context, t config.Tool, step config.Step, idx int, p Params) error {
-	// Container steps render against fixed /vant/* mountpoints; host steps use the
+	// Container steps render against fixed /cgvant/* mountpoints; host steps use the
 	// real host paths. The script always lives in the (host) workdir.
 	var repl *strings.Replacer
 	var binds []string
@@ -205,7 +205,7 @@ func runStep(ctx context.Context, t config.Tool, step config.Step, idx int, p Pa
 			return fmt.Errorf("container step needs an image (set tool.image)")
 		}
 		inner = append([]string{t.ContainerEngine(), "exec", "--no-home"}, binds...)
-		// The script lives in the host workdir, which is bound at /vant/work.
+		// The script lives in the host workdir, which is bound at /cgvant/work.
 		inner = append(inner, p.Image, "bash", ctrRoot+"/work/"+filepath.Base(script))
 	} else {
 		inner = []string{"bash", script}

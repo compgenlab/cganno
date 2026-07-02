@@ -9,10 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/compgenlab/vant/internal/checksum"
-	"github.com/compgenlab/vant/internal/config"
-	"github.com/compgenlab/vant/internal/fetch"
-	"github.com/compgenlab/vant/internal/prompt"
+	"github.com/compgenlab/cgvant/internal/checksum"
+	"github.com/compgenlab/cgvant/internal/config"
+	"github.com/compgenlab/cgvant/internal/fetch"
+	"github.com/compgenlab/cgvant/internal/prompt"
 )
 
 // --- top-level source helpers (v2 layout) ---------------------------------
@@ -56,13 +56,13 @@ func cmdInit(cfgPath string, args []string) error {
 	}
 
 	cfg := config.Config{
-		DataDir:         "$VANT_HOME/data",
-		CacheDir:        "$VANT_HOME/data/cache",
+		DataDir:         "$CGVANT_HOME/data",
+		CacheDir:        "$CGVANT_HOME/data/cache",
 		DefaultSnapshot: snap,
 		AnnotationsDir:  annDir,
-		Database:        config.Database{Backend: "sqlite", Path: "$VANT_HOME/vant.db"},
+		Database:        config.Database{Backend: "sqlite", Path: "$CGVANT_HOME/cgvant.db"},
 		// Reference FASTAs are keyed by assembly; the starter snapshot is GRCh38.
-		References: map[string]config.Reference{"GRCh38": {Fasta: "$VANT_HOME/ref/GRCh38.fa"}},
+		References: map[string]config.Reference{"GRCh38": {Fasta: "$CGVANT_HOME/ref/GRCh38.fa"}},
 	}
 	if err := config.WriteTOML(cfgPath, cfg); err != nil {
 		return fmt.Errorf("write %s: %w", cfgPath, err)
@@ -73,7 +73,7 @@ func cmdInit(cfgPath string, args []string) error {
 	}
 
 	// Starter source: just the self-contained builtins bundle (no data to download).
-	// Real sources/tools are added later via `vant configure` or `vant registry`.
+	// Real sources/tools are added later via `cgvant configure` or `cgvant registry`.
 	builtins := &config.Snapshot{Sources: []config.Source{{
 		Name: "builtins", Version: "1", Type: "builtin",
 		Annotations: []config.Annotation{
@@ -84,7 +84,7 @@ func cmdInit(cfgPath string, args []string) error {
 		return err
 	}
 	// A snapshot manifest referencing the builtins. Defaults are left unset — add
-	// real sources and choose their default annotations via `vant configure`.
+	// real sources and choose their default annotations via `cgvant configure`.
 	manifest := &config.SnapshotConfig{
 		Description: "starter snapshot", Assembly: "GRCh38",
 		Sources: []string{"builtins:1"},
@@ -97,11 +97,11 @@ func cmdInit(cfgPath string, args []string) error {
 
 	// Offer to jump straight into the editor to add/download sources and tools.
 	// Only when stdin is a real terminal — the editor is a full-screen TUI, so a
-	// piped/non-interactive `vant init` must not try to launch it.
+	// piped/non-interactive `cgvant init` must not try to launch it.
 	if stdinIsTerminal() && pr.AskBool("configure annotation sources & tools now?", true) {
 		return cmdEdit(cfgPath, nil)
 	}
-	fmt.Println("run `vant configure` to add sources/tools, then `vant download` to fetch them")
+	fmt.Println("run `cgvant configure` to add sources/tools, then `cgvant download` to fetch them")
 	return nil
 }
 

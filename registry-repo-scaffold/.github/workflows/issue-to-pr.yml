@@ -1,4 +1,4 @@
-# Converts a `source-submission` issue (filed by `vant registry submit`) into a PR:
+# Converts a `source-submission` issue (filed by `cgvant registry submit`) into a PR:
 # parses the ```toml block, writes the source config + registry.toml entry, opens a PR
 # that closes the issue. A maintainer reviews and merges.
 name: issue-to-pr
@@ -96,7 +96,7 @@ jobs:
               return "\n".join(out)
 
           sections = {"snapshots": doc.get("snapshots", []), "sources": entries}
-          text = "# vant registry catalog — auto-maintained by the issue-to-pr workflow.\n\n"
+          text = "# cgvant registry catalog — auto-maintained by the issue-to-pr workflow.\n\n"
           for tbl in ("snapshots", "sources"):
               text += emit(tbl, sections[tbl])
           reg.write_text(text.rstrip() + "\n")

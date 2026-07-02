@@ -13,7 +13,7 @@ import (
 
 // cmdBgzip and cmdTabix are hidden subcommands that mimic the `bgzip` and `tabix`
 // programs using the hts library, so source-build recipes and tool post-processing
-// scripts can `vant bgzip` / `vant tabix` without those binaries installed.
+// scripts can `cgvant bgzip` / `cgvant tabix` without those binaries installed.
 
 // tabixFlags holds the tabix index configuration shared by `tabix` and by `bgzip`'s
 // optional auto-index.
@@ -77,7 +77,7 @@ func (tf *tabixFlags) opts() (*tabix.WriterOpts, error) {
 
 // cmdBgzip BGZF-compresses a file argument (or stdin) to -o FILE (or stdout). When a
 // tabix preset/columns are also given (which requires -o), it writes the index too —
-// `vant bgzip -o out.vcf.gz -p vcf < in.vcf` produces out.vcf.gz + out.vcf.gz.tbi.
+// `cgvant bgzip -o out.vcf.gz -p vcf < in.vcf` produces out.vcf.gz + out.vcf.gz.tbi.
 func cmdBgzip(args []string) error {
 	fs := flag.NewFlagSet("bgzip", flag.ContinueOnError)
 	out := fs.String("o", "", "write to this file (default stdout); required to also write an index")

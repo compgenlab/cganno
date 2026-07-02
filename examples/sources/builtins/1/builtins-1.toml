@@ -1,4 +1,4 @@
-# Built-in annotators — vant's self-contained "built-in tool calls" (hts, no data
+# Built-in annotators — cgvant's self-contained "built-in tool calls" (hts, no data
 # file). One source of `type = "builtin"` holds them; each annotation names its
 # builtin. Applied only in the `annotate -o` (VCF -> annotated VCF) path.
 #   variant-only   (from chrom/pos/ref/alt; work on any VCF):

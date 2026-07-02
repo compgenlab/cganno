@@ -4,7 +4,7 @@ import (
 	"context"
 	"hash/fnv"
 
-	"github.com/compgenlab/vant/internal/model"
+	"github.com/compgenlab/cgvant/internal/model"
 )
 
 // Mock is a deterministic stand-in for the real annotation workflow. It derives

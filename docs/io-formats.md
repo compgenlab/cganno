@@ -1,10 +1,10 @@
 # Input & output formats
 
-There are two "input/output" boundaries in vant, and it helps to keep them separate:
+There are two "input/output" boundaries in cgvant, and it helps to keep them separate:
 
-1. **The `vant annotate` command** — what variants you give it, and how it renders the
+1. **The `cgvant annotate` command** — what variants you give it, and how it renders the
    results to you.
-2. **A tool source** — how vant hands the query variants *into* an external tool
+2. **A tool source** — how cgvant hands the query variants *into* an external tool
    (`input_format`), and how it reads the tool's produced file back (`format`).
 
 ---
@@ -14,8 +14,8 @@ There are two "input/output" boundaries in vant, and it helps to keep them separ
 You annotate either **bare loci** or a **VCF file**:
 
 ```sh
-vant annotate chr1:100:A:G chr2:200:C:T      # one or more chrom:pos:ref:alt loci
-vant annotate variants.vcf                   # every site in a VCF (multi-allelic ALTs are split)
+cgvant annotate chr1:100:A:G chr2:200:C:T      # one or more chrom:pos:ref:alt loci
+cgvant annotate variants.vcf                   # every site in a VCF (multi-allelic ALTs are split)
 ```
 
 Both drive the same per-source lookup — a coordinate query into each source's tabix index,
@@ -34,7 +34,7 @@ Two internal paths back this:
 ## Annotate output
 
 ```sh
-vant annotate [--all | -a name,…] [--format tab|vcf|json|text] [-o FILE] <vcf|locus…>
+cgvant annotate [--all | -a name,…] [--format tab|vcf|json|text] [-o FILE] <vcf|locus…>
 ```
 
 - **`--format`** selects the rendering; the default is **`tab`**.
@@ -50,10 +50,10 @@ vant annotate [--all | -a name,…] [--format tab|vcf|json|text] [-o FILE] <vcf|
 | **`vcf`** | a fully-annotated VCF via the streaming pipeline (samples preserved for a VCF input; a sites-only VCF is synthesized for bare loci) |
 
 ```sh
-vant annotate chr1:100:A:G                       # → TSV (default)
-vant annotate --format json chr1:100:A:G         # → JSON array
-vant annotate --format vcf -o out.vcf in.vcf     # → annotated VCF (samples preserved)
-vant annotate -a clinvar_sig -o hits.tsv in.vcf  # → TSV of one annotation, to a file
+cgvant annotate chr1:100:A:G                       # → TSV (default)
+cgvant annotate --format json chr1:100:A:G         # → JSON array
+cgvant annotate --format vcf -o out.vcf in.vcf     # → annotated VCF (samples preserved)
+cgvant annotate -a clinvar_sig -o hits.tsv in.vcf  # → TSV of one annotation, to a file
 ```
 
 The `tab` output columns are fixed (`chrom pos ref alt` + one per annotation) and are
@@ -64,7 +64,7 @@ unrelated to a `tab` *source's* `ref_col`/`alt_col` (which describe how that sou
 
 ## Tool source I/O
 
-A tool source is defined by how vant writes the query variants for it and how it reads the
+A tool source is defined by how cgvant writes the query variants for it and how it reads the
 result back. The variants always reach the tool as a **file** — a single-variant query is
 just a one-line/one-record file; on the cache path only the **novel** loci are written.
 
@@ -72,9 +72,9 @@ just a one-line/one-record file; on the cache path only the **novel** loci are w
 
 Controls how `{input}` is written for the tool:
 
-- **`"vcf"`** (default) — vant materializes a sites-only VCF (or, on the `--format vcf`
+- **`"vcf"`** (default) — cgvant materializes a sites-only VCF (or, on the `--format vcf`
   path, passes the input VCF with its samples). Use this for VCF tools like VEP.
-- **a per-variant line template** — vant writes one line per variant. For a variant-list
+- **a per-variant line template** — cgvant writes one line per variant. For a variant-list
   tool (e.g. ANNOVAR's avinput):
 
   ```toml
@@ -95,7 +95,7 @@ The tool's produced file is read back *exactly like a static source of that form
   (omit → position match); each annotation's `field` is a 1-based column number or a
   header column name. Header lines are `#`-prefixed.
 
-The output must carry coordinates so vant can key each record back to a locus — which is
+The output must carry coordinates so cgvant can key each record back to a locus — which is
 why `vcf` and `tab` are the two supported tool output formats. (A bare `text`/`json`
 stream isn't keyable without coordinates; JSON output support may come later when a concrete
 tool needs it.)

@@ -17,12 +17,12 @@ import (
 	"github.com/compgenlab/hts/vcf"
 	htsann "github.com/compgenlab/hts/vcf/annotate"
 
-	"github.com/compgenlab/vant/internal/config"
-	"github.com/compgenlab/vant/internal/model"
-	"github.com/compgenlab/vant/internal/software"
-	"github.com/compgenlab/vant/internal/store"
-	"github.com/compgenlab/vant/internal/tool"
-	ivcf "github.com/compgenlab/vant/internal/vcf"
+	"github.com/compgenlab/cgvant/internal/config"
+	"github.com/compgenlab/cgvant/internal/model"
+	"github.com/compgenlab/cgvant/internal/software"
+	"github.com/compgenlab/cgvant/internal/store"
+	"github.com/compgenlab/cgvant/internal/tool"
+	ivcf "github.com/compgenlab/cgvant/internal/vcf"
 )
 
 // AnnotateVCFSnapshot annotates inPath → outPath for a whole snapshot: it first
@@ -41,7 +41,7 @@ func AnnotateVCFSnapshot(ctx context.Context, cfg *config.Config, snap *config.S
 		return AnnotateVCF(p, inPath, outPath)
 	}
 
-	workdir, err := os.MkdirTemp("", "vant-tools-")
+	workdir, err := os.MkdirTemp("", "cgvant-tools-")
 	if err != nil {
 		return err
 	}
@@ -274,7 +274,7 @@ func (m *multiFile) Close() error {
 	return err
 }
 
-// buildSingle maps vant's config knobs onto hts annotate options for one file.
+// buildSingle maps cgvant's config knobs onto hts annotate options for one file.
 // AutoConvert is on for every annotator: hts builds a contig converter from the
 // source file's own ref names, so input/source chrom naming (Ensembl "1" / UCSC
 // "chr1" / NCBI "NC_000001.11") is matched automatically.

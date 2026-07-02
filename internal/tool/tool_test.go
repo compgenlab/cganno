@@ -9,35 +9,35 @@ import (
 
 	"github.com/compgenlab/hts/htsio/tabix"
 
-	"github.com/compgenlab/vant/internal/config"
+	"github.com/compgenlab/cgvant/internal/config"
 )
 
-// TestContainerMapping: a container step binds each host dir to a fixed /vant/*
+// TestContainerMapping: a container step binds each host dir to a fixed /cgvant/*
 // mountpoint and renders the placeholders to those in-container paths (host-
 // independent, so the engine never recreates a deep host path inside the image).
 func TestContainerMapping(t *testing.T) {
 	p := Params{
 		Datadir: "/home/u/deep/cache/tools/vep/113",
-		Workdir: "/tmp/vant-xyz",
+		Workdir: "/tmp/cgvant-xyz",
 		Ref:     "/refs/GRCh38.fa",
 		Input:   "/data/in.vcf",
-		Output:  "/tmp/vant-xyz/vep.vcf.gz",
+		Output:  "/tmp/cgvant-xyz/vep.vcf.gz",
 		Image:   "/img/vep.sif",
 	}
 	repl, binds := containerMapping(config.Tool{}, p)
 
 	wantBinds := []string{
-		"-B", "/home/u/deep/cache/tools/vep/113:/vant/data",
-		"-B", "/tmp/vant-xyz:/vant/work",
-		"-B", "/refs:/vant/ref",
-		"-B", "/data:/vant/in",
+		"-B", "/home/u/deep/cache/tools/vep/113:/cgvant/data",
+		"-B", "/tmp/cgvant-xyz:/cgvant/work",
+		"-B", "/refs:/cgvant/ref",
+		"-B", "/data:/cgvant/in",
 	}
 	if strings.Join(binds, " ") != strings.Join(wantBinds, " ") {
 		t.Errorf("binds = %v\nwant %v", binds, wantBinds)
 	}
 
 	got := repl.Replace("vep -i {input} -o {output} --dir_cache {datadir} --fasta {ref} --work {workdir}")
-	want := "vep -i /vant/in/in.vcf -o /vant/work/vep.vcf.gz --dir_cache /vant/data --fasta /vant/ref/GRCh38.fa --work /vant/work"
+	want := "vep -i /cgvant/in/in.vcf -o /cgvant/work/vep.vcf.gz --dir_cache /cgvant/data --fasta /cgvant/ref/GRCh38.fa --work /cgvant/work"
 	if got != want {
 		t.Errorf("render =\n %q\nwant\n %q", got, want)
 	}
