@@ -70,8 +70,11 @@ default_annotations = ["clinvar_sig", "gnomad_af", "vep_consequence"]
   `--all`/`-a`. Managed here (not on the source), so one source can be default in one
   snapshot and opt-in in another.
 
-Manage snapshots with `cgvant snapshot add|list`, or interactively with `cgvant configure`
-(a TUI with checkbox editors for a snapshot's member sources and default annotations).
+Manage everything interactively with **`cgvant configure`** — a TUI whose home menu has
+three areas: **Config settings** (edit `config.toml`), **Sources** (browse/add/edit the
+whole local source library), and **Snapshots** (pick a snapshot, then checkbox-select its
+member sources and default annotations). The same tasks are scriptable via
+`cgvant snapshot add|list`, `cgvant source add`, and `cgvant annotation add`.
 
 ## Annotation
 

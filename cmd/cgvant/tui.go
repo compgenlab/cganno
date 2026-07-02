@@ -31,7 +31,7 @@ func cmdEdit(cfgPath string, args []string) error {
 	if len(args) > 0 {
 		m.toFragments(args[0])
 	} else {
-		m.toSnapshots()
+		m.toHome()
 	}
 	_, err = tea.NewProgram(m, tea.WithAltScreen()).Run()
 	return err
@@ -86,7 +86,10 @@ func styledDelegate() list.DefaultDelegate {
 type screen int
 
 const (
-	scrSnapshots screen = iota
+	scrHome screen = iota
+	scrSources
+	scrConfig
+	scrSnapshots
 	scrFragments
 	scrSourceForm
 	scrAnnotations
@@ -112,10 +115,17 @@ type editModel struct {
 	quitting bool
 
 	// working state
-	curSnap   string
-	curPath   string // fragment path of the source being edited ("" = new)
-	curSource *config.Source
-	annIdx    int
+	curSnap     string
+	curPath     string // fragment path of the source being edited ("" = new)
+	curSource   *config.Source
+	annIdx      int
+	libraryMode bool // editing a source in the top-level library (not within a snapshot)
+
+	// config.toml editor scratch (raw config; $CGVANT_HOME literals preserved)
+	cfgEdit       *config.Config
+	cfgRegistries string
+	cfgRefAsm     string // the default snapshot's assembly, whose FASTA we expose
+	cfgRefFasta   string
 
 	// form-bound scratch
 	newSnapName    string
@@ -140,7 +150,7 @@ func (m *editModel) Init() tea.Cmd { return nil }
 func (m *editModel) isForm() bool {
 	switch m.screen {
 	case scrSourceForm, scrAnnForm, scrConfirm, scrNewSnap, scrBuiltinArgs,
-		scrSnapMembers, scrSnapDefaults:
+		scrSnapMembers, scrSnapDefaults, scrConfig:
 		return true
 	}
 	return false
@@ -212,11 +222,49 @@ func (m *editModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m *editModel) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	sel, _ := m.list.SelectedItem().(item)
 	switch m.screen {
+	case scrHome:
+		switch msg.String() {
+		case "q", "esc":
+			m.quitting = true
+			return m, tea.Quit
+		case "enter":
+			switch sel.kind {
+			case "config":
+				return m, m.toConfig()
+			case "sources":
+				return m, m.toSources()
+			case "snapshots":
+				return m, m.toSnapshots()
+			}
+		}
+	case scrSources:
+		switch msg.String() {
+		case "esc", "q":
+			return m, m.toHome()
+		case "s":
+			m.startNewSource()
+			return m, m.toSourceForm()
+		case "b":
+			return m, m.toBuiltins("")
+		case "enter":
+			switch sel.kind {
+			case "source":
+				m.openSource(sel.payload)
+				return m, m.toSourceForm()
+			case "builtin", "addbuiltin":
+				return m, m.toBuiltins("")
+			case "addsource":
+				m.startNewSource()
+				return m, m.toSourceForm()
+			}
+		}
 	case scrSnapshots:
 		switch msg.String() {
 		case "q":
 			m.quitting = true
 			return m, tea.Quit
+		case "esc":
+			return m, m.toHome()
 		case "n":
 			return m, m.toNewSnap()
 		case "enter":
@@ -272,7 +320,7 @@ func (m *editModel) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case scrBuiltins:
 		switch msg.String() {
 		case "esc", "q":
-			return m, m.toFragments(m.curSnap)
+			return m, m.srcReturn()
 		case "d":
 			if sel.kind == "present" {
 				m.removeBuiltin(sel.payload)
@@ -331,13 +379,13 @@ func (m *editModel) onFormComplete() tea.Cmd {
 		case "delete":
 			return m.toConfirm(m.curPath)
 		case "cancel":
-			return m.toFragments(m.curSnap)
+			return m.srcReturn()
 		default: // save
 			if err := m.saveSource(); err != nil {
 				m.err = err
 				return m.toSourceForm()
 			}
-			return m.toFragments(m.curSnap)
+			return m.srcReturn()
 		}
 	case scrAnnForm:
 		switch m.action {
@@ -368,7 +416,15 @@ func (m *editModel) onFormComplete() tea.Cmd {
 		if m.confirmVal {
 			os.Remove(m.curPath)
 		}
-		return m.toFragments(m.curSnap)
+		return m.srcReturn()
+	case scrConfig:
+		if m.action != "cancel" {
+			if err := m.saveConfig(); err != nil {
+				m.err = err
+				return m.toConfig()
+			}
+		}
+		return m.toHome()
 	case scrBuiltinArgs:
 		if m.argsVal != "" {
 			m.appendBuiltin(m.pendingBuiltin, m.argsVal)
@@ -394,14 +450,15 @@ func (m *editModel) onFormComplete() tea.Cmd {
 func (m *editModel) onFormAbort() tea.Cmd {
 	switch m.screen {
 	case scrSourceForm:
-		return m.toFragments(m.curSnap)
+		return m.srcReturn()
 	case scrAnnForm:
 		return m.toAnnotations()
-	case scrConfirm, scrNewSnap:
-		if m.screen == scrNewSnap {
-			return m.toSnapshots()
-		}
-		return m.toFragments(m.curSnap)
+	case scrConfig:
+		return m.toHome()
+	case scrNewSnap:
+		return m.toSnapshots()
+	case scrConfirm:
+		return m.srcReturn()
 	case scrBuiltinArgs:
 		return m.toBuiltins(m.curSnap)
 	case scrSnapMembers, scrSnapDefaults:
@@ -412,8 +469,140 @@ func (m *editModel) onFormAbort() tea.Cmd {
 
 // --- screens ----------------------------------------------------------------
 
+// toHome is the top-level menu: config settings, the source library, and snapshots.
+func (m *editModel) toHome() tea.Cmd {
+	m.screen = scrHome
+	m.libraryMode = false
+	m.setList([]list.Item{
+		item{title: "Config settings", desc: "edit config.toml (dirs, database, registries, reference)", kind: "config"},
+		item{title: "Sources", desc: "browse, add, and edit the local source library", kind: "sources"},
+		item{title: "Snapshots", desc: "add sources to snapshots + choose default annotations", kind: "snapshots"},
+	})
+	return nil
+}
+
+// toSources browses the whole local source library (every source on disk, regardless of
+// which snapshot references it). Editing here does not touch any snapshot.
+func (m *editModel) toSources() tea.Cmd {
+	m.screen = scrSources
+	m.libraryMode = true
+	m.curSnap = ""
+	refs, _ := m.cfg.ListSources()
+	var items []list.Item
+	for _, ref := range refs {
+		n, v, err := m.cfg.ResolveSourceRef(ref)
+		if err != nil {
+			continue
+		}
+		f := m.cfg.SourceFile(n, v)
+		frag, err := config.ReadFragment(f)
+		if err != nil || len(frag.Sources) == 0 {
+			items = append(items, item{title: ref, desc: errStyle.Render("parse error"), kind: "bad"})
+			continue
+		}
+		s := frag.Sources[0]
+		switch {
+		case s.IsBuiltinSource():
+			items = append(items, item{title: ref + "  ⟨builtin⟩",
+				desc: fmt.Sprintf("%d builtin annotation(s)", len(s.Annotations)), kind: "builtin", payload: f})
+		case s.IsTool():
+			items = append(items, item{title: ref + "  ⟨tool⟩ (" + orDash(s.Format) + ")",
+				desc: styledBadge(missingToolFields(s.AsTool())) + annCount(len(s.Annotations)), kind: "source", payload: f})
+		default:
+			items = append(items, item{title: ref + "  (" + orDash(s.Format) + ")",
+				desc: styledBadge(missingSourceFields(s)) + annCount(len(s.Annotations)), kind: "source", payload: f})
+		}
+	}
+	items = append(items, item{title: "＋ Add source", kind: "addsource"})
+	items = append(items, item{title: "＋ Builtins", kind: "addbuiltin"})
+	m.setList(items)
+	return nil
+}
+
+// toConfig edits config.toml. It uses ReadConfigFile so $CGVANT_HOME literals round-trip
+// instead of being baked into absolute paths.
+func (m *editModel) toConfig() tea.Cmd {
+	m.screen = scrConfig
+	raw, err := config.ReadConfigFile(m.cfgPath)
+	if err != nil {
+		m.err = err
+		return m.toHome()
+	}
+	if raw.Database.Backend == "" {
+		raw.Database.Backend = "none" // "" = cache disabled; show it explicitly
+	}
+	m.cfgEdit = raw
+	m.cfgRegistries = strings.Join(raw.Registries, "\n")
+	// Expose the reference FASTA for the default snapshot's assembly (a convenience; the
+	// full per-assembly [references.<assembly>] map is edited in the file).
+	m.cfgRefAsm, m.cfgRefFasta = "", ""
+	if sc, e := config.ReadSnapshotConfig(m.cfg.SnapshotFile(raw.DefaultSnapshot)); e == nil && sc.Assembly != "" {
+		m.cfgRefAsm = sc.Assembly
+		m.cfgRefFasta = raw.References[sc.Assembly].Fasta
+	}
+	m.action = "save"
+
+	fields := []huh.Field{
+		huh.NewInput().Title("data_dir").Value(&m.cfgEdit.DataDir),
+		huh.NewInput().Title("cache_dir").Value(&m.cfgEdit.CacheDir),
+		huh.NewInput().Title("annotations_dir").Value(&m.cfgEdit.AnnotationsDir),
+	}
+	if snaps, _ := m.cfg.ListSnapshots(); len(snaps) > 0 {
+		fields = append(fields, huh.NewSelect[string]().Title("default_snapshot").
+			Options(huh.NewOptions(snaps...)...).Value(&m.cfgEdit.DefaultSnapshot))
+	} else {
+		fields = append(fields, huh.NewInput().Title("default_snapshot").Value(&m.cfgEdit.DefaultSnapshot))
+	}
+	fields = append(fields,
+		huh.NewSelect[string]().Title("database backend").Description("none = cache disabled").
+			Options(huh.NewOptions("sqlite", "postgres", "none")...).Value(&m.cfgEdit.Database.Backend),
+		huh.NewInput().Title("database path/DSN").Value(&m.cfgEdit.Database.Path),
+		huh.NewText().Title("registries").Description("one registry.toml URL per line").Value(&m.cfgRegistries),
+	)
+	if m.cfgRefAsm != "" {
+		fields = append(fields, huh.NewInput().Title("reference FASTA ("+m.cfgRefAsm+")").
+			Description("[references."+m.cfgRefAsm+"]; other assemblies are edited in the file").
+			Value(&m.cfgRefFasta))
+	}
+	fields = append(fields, huh.NewSelect[string]().Title("▸ action").
+		Options(huh.NewOption("Save", "save"), huh.NewOption("Cancel", "cancel")).Value(&m.action))
+
+	m.form = huh.NewForm(huh.NewGroup(fields...)).WithTheme(formTheme()).WithShowHelp(true)
+	m.sizeForm()
+	return m.form.Init()
+}
+
+func (m *editModel) saveConfig() error {
+	c := m.cfgEdit
+	var regs []string
+	for _, line := range strings.Split(m.cfgRegistries, "\n") {
+		if s := strings.TrimSpace(line); s != "" {
+			regs = append(regs, s)
+		}
+	}
+	c.Registries = regs
+	if m.cfgRefAsm != "" {
+		if c.References == nil {
+			c.References = map[string]config.Reference{}
+		}
+		if strings.TrimSpace(m.cfgRefFasta) == "" {
+			delete(c.References, m.cfgRefAsm)
+		} else {
+			c.References[m.cfgRefAsm] = config.Reference{Fasta: m.cfgRefFasta}
+		}
+	}
+	if err := config.WriteTOML(m.cfgPath, *c); err != nil {
+		return err
+	}
+	if reloaded, err := config.Load(m.cfgPath); err == nil {
+		m.cfg = reloaded // let the rest of the TUI see the change
+	}
+	return nil
+}
+
 func (m *editModel) toSnapshots() tea.Cmd {
 	m.screen = scrSnapshots
+	m.libraryMode = false
 	names, _ := m.cfg.ListSnapshots()
 	var items []list.Item
 	for _, n := range names {
@@ -428,8 +617,18 @@ func (m *editModel) toSnapshots() tea.Cmd {
 	return nil
 }
 
+// srcReturn is where the shared source/builtin editors go back to: the library browser
+// in library mode, else the current snapshot's fragment list.
+func (m *editModel) srcReturn() tea.Cmd {
+	if m.libraryMode {
+		return m.toSources()
+	}
+	return m.toFragments(m.curSnap)
+}
+
 func (m *editModel) toFragments(snap string) tea.Cmd {
 	m.screen = scrFragments
+	m.libraryMode = false
 	m.curSnap = snap
 	var items []list.Item
 	files := m.manifestItemFiles(snap)
@@ -666,18 +865,30 @@ func (m *editModel) saveSource() error {
 	} else {
 		s.RefCol, s.AltCol = 0, 0
 	}
-	if miss := missingSourceFields(*s); len(miss) > 0 {
+	var miss []string
+	if s.IsTool() { // a tool source round-trips its image/steps; it needs no url
+		miss = missingToolFields(s.AsTool())
+	} else {
+		miss = missingSourceFields(*s)
+	}
+	if len(miss) > 0 {
 		return fmt.Errorf("missing required field(s): %s", strings.Join(miss, ", "))
 	}
+	newFile := m.curPath == ""
 	path := m.curPath
-	if path == "" {
+	if newFile {
 		path = m.cfg.SourceFile(s.Name, s.Version)
 		m.curPath = path
-		if err := addRefToSnapshot(m.cfg, m.curSnap, s.ID()); err != nil {
-			return err
-		}
 	}
-	return config.WriteFragment(path, &config.Snapshot{Sources: []config.Source{*s}})
+	if err := config.WriteFragment(path, &config.Snapshot{Sources: []config.Source{*s}}); err != nil {
+		return err
+	}
+	// In snapshot mode a newly-created source is also referenced from the snapshot;
+	// in the library it's just written to disk.
+	if newFile && !m.libraryMode && m.curSnap != "" {
+		return addRefToSnapshot(m.cfg, m.curSnap, s.ID())
+	}
+	return nil
 }
 
 func (m *editModel) toAnnotations() tea.Cmd {
@@ -796,8 +1007,10 @@ func (m *editModel) saveBuiltins() error {
 	}
 	if m.builtinPath == "" {
 		m.builtinPath = m.cfg.SourceFile("builtins", "1")
-		if err := addRefToSnapshot(m.cfg, m.curSnap, "builtins:1"); err != nil {
-			return err
+		if !m.libraryMode && m.curSnap != "" {
+			if err := addRefToSnapshot(m.cfg, m.curSnap, "builtins:1"); err != nil {
+				return err
+			}
 		}
 	}
 	return config.WriteFragment(m.builtinPath, m.builtinFrag)
@@ -863,6 +1076,10 @@ func (m *editModel) View() string {
 func (m *editModel) breadcrumb() string {
 	parts := []string{"cgvant"}
 	switch m.screen {
+	case scrSources:
+		parts = append(parts, "sources")
+	case scrConfig:
+		parts = append(parts, "config")
 	case scrSnapshots:
 		parts = append(parts, "snapshots")
 	case scrNewSnap:
@@ -870,19 +1087,28 @@ func (m *editModel) breadcrumb() string {
 	case scrFragments:
 		parts = append(parts, m.curSnap)
 	case scrSourceForm:
-		parts = append(parts, m.curSnap, srcName(m.curSource))
+		parts = append(parts, m.ctxLabel(), srcName(m.curSource))
 	case scrAnnotations, scrAnnForm:
-		parts = append(parts, m.curSnap, srcName(m.curSource), "annotations")
+		parts = append(parts, m.ctxLabel(), srcName(m.curSource), "annotations")
 	case scrBuiltins, scrBuiltinArgs:
-		parts = append(parts, m.curSnap, "builtins")
+		parts = append(parts, m.ctxLabel(), "builtins")
 	case scrSnapMembers:
 		parts = append(parts, m.curSnap, "members")
 	case scrSnapDefaults:
 		parts = append(parts, m.curSnap, "defaults")
 	case scrConfirm:
-		parts = append(parts, m.curSnap, "delete?")
+		parts = append(parts, m.ctxLabel(), "delete?")
 	}
 	return "❯ " + strings.Join(parts, " ▸ ")
+}
+
+// ctxLabel is the breadcrumb segment for the shared source editors: "sources" in library
+// mode, else the current snapshot name.
+func (m *editModel) ctxLabel() string {
+	if m.libraryMode {
+		return "sources"
+	}
+	return m.curSnap
 }
 
 func srcName(s *config.Source) string {
@@ -907,8 +1133,12 @@ func (m *editModel) renderFooter() string {
 
 func (m *editModel) hints() [][2]string {
 	switch m.screen {
+	case scrHome:
+		return [][2]string{{"enter", "open"}, {"↑↓", "move"}, {"q", "quit"}}
+	case scrSources:
+		return [][2]string{{"enter", "edit"}, {"s", "add source"}, {"b", "builtins"}, {"/", "filter"}, {"esc", "home"}}
 	case scrSnapshots:
-		return [][2]string{{"enter", "open"}, {"n", "new"}, {"/", "filter"}, {"q", "quit"}}
+		return [][2]string{{"enter", "open"}, {"n", "new"}, {"/", "filter"}, {"esc", "home"}, {"q", "quit"}}
 	case scrFragments:
 		return [][2]string{{"enter", "edit"}, {"s", "add source"}, {"b", "builtins"}, {"m", "members"}, {"d", "defaults"}, {"esc", "back"}}
 	case scrSnapMembers, scrSnapDefaults:

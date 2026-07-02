@@ -197,3 +197,86 @@ func TestEditorViewRenders(t *testing.T) {
 		}
 	}
 }
+
+// TestEditorLibrarySaveNoSnapshotRef: saving a source in the library (libraryMode, no
+// current snapshot) writes the fragment but does NOT add a ref to any snapshot manifest.
+func TestEditorLibrarySaveNoSnapshotRef(t *testing.T) {
+	m := newTestEditor(t)
+	m.libraryMode = true
+	m.curSnap = ""
+	m.startNewSource()
+	m.curSource.Name, m.curSource.Version, m.curSource.Format = "gnomad", "4.1", "vcf"
+	m.curSource.URL = "https://x/g.vcf.gz"
+	if err := m.saveSource(); err != nil {
+		t.Fatalf("saveSource: %v", err)
+	}
+	if _, err := os.Stat(m.cfg.SourceFile("gnomad", "4.1")); err != nil {
+		t.Fatalf("source fragment not written: %v", err)
+	}
+	sc, err := config.ReadSnapshotConfig(m.cfg.SnapshotFile("s"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sc.Sources) != 0 {
+		t.Errorf("library save should not touch the snapshot, but sources = %v", sc.Sources)
+	}
+}
+
+// TestEditorSourcesBrowse: the library browser lists every local source (data + builtin),
+// regardless of snapshot membership, plus the add entries.
+func TestEditorSourcesBrowse(t *testing.T) {
+	m := newTestEditor(t)
+	if err := config.WriteFragment(m.cfg.SourceFile("clinvar", "2026-01"), &config.Snapshot{Sources: []config.Source{{
+		Name: "clinvar", Version: "2026-01", Format: "vcf", URL: "https://x/c.vcf.gz",
+	}}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.WriteFragment(m.cfg.SourceFile("builtins", "1"), &config.Snapshot{Sources: []config.Source{{
+		Name: "builtins", Version: "1", Type: "builtin", Annotations: []config.Annotation{{Builtin: "tstv"}},
+	}}}); err != nil {
+		t.Fatal(err)
+	}
+	m.toSources()
+	if !m.libraryMode {
+		t.Error("toSources should set libraryMode")
+	}
+	var titles []string
+	for _, it := range m.list.Items() {
+		titles = append(titles, it.(item).title)
+	}
+	joined := strings.Join(titles, "|")
+	for _, want := range []string{"clinvar:2026-01", "builtins:1", "Add source", "Builtins"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("sources browser missing %q: %v", want, titles)
+		}
+	}
+}
+
+// TestEditorConfigRoundTrip: the config editor writes config.toml, preserving $CGVANT_HOME
+// literals and round-tripping registries + backend.
+func TestEditorConfigRoundTrip(t *testing.T) {
+	m := newTestEditor(t)
+	m.toConfig()
+	if m.cfgEdit == nil {
+		t.Fatal("toConfig did not load the config")
+	}
+	m.cfgEdit.DataDir = "$CGVANT_HOME/data"
+	m.cfgEdit.Database.Backend = "sqlite"
+	m.cfgRegistries = "https://a/r.toml\nhttps://b/r.toml\n"
+	if err := m.saveConfig(); err != nil {
+		t.Fatalf("saveConfig: %v", err)
+	}
+	raw, err := config.ReadConfigFile(m.cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if raw.DataDir != "$CGVANT_HOME/data" {
+		t.Errorf("data_dir literal not preserved: %q", raw.DataDir)
+	}
+	if len(raw.Registries) != 2 || raw.Registries[0] != "https://a/r.toml" {
+		t.Errorf("registries = %v", raw.Registries)
+	}
+	if raw.Database.Backend != "sqlite" {
+		t.Errorf("backend = %q", raw.Database.Backend)
+	}
+}
