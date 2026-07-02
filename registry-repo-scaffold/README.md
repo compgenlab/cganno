@@ -1,14 +1,14 @@
 # vant-public-data-registry
 
-A catalog of **annotation source/release configs** for [vant](https://github.com/compgenlab/vant).
+A catalog of **annotation source/snapshot configs** for [vant](https://github.com/compgenlab/vant).
 It holds *configurations, not data* — `vant download` fetches the actual files.
 
 ## Layout
 
 ```
-registry.toml                              catalog: [[sources]]/[[releases]] entries (each has a `file`)
+registry.toml                              catalog: [[sources]]/[[snapshots]] entries (each has a `file`)
 sources/<name>/<ver>/<name>-<ver>.toml     one source's config snippet (a source + its annotations)
-releases/<name>.toml                       a full release bundle
+snapshots/<name>.toml                      a full snapshot bundle (references sources by name:version)
 ```
 
 `registry.toml` is served over HTTPS (GitHub raw, Pages, S3 — anywhere). vant
@@ -20,15 +20,15 @@ clinvar:2026-01`, or `clinvar` / `clinvar:latest` for the entry marked `latest =
 ## Consuming it
 
 ```sh
-vant registry list                                # uses this registry by default
-vant release add <release-name>                   # create a local release first
-vant registry add-source <release-name> clinvar   # merge a source's config into it
-vant registry pull-release <release-name>         # or pull a whole release
+vant registry list                                          # uses this registry by default
+vant registry add-source clinvar:2026-01 --snapshot 2026-07 # add one source to a snapshot
+vant registry add-source vep:113 --snapshot 2026-07         # a tool source works the same way
+vant registry pull-snapshot 2026-07                         # or pull a whole snapshot (+ its sources)
 ```
 
 ## Contributing a source or tool
 
-Run `vant registry submit <release-name> <name>` (needs a `public_repo`
+Run `vant registry submit <name[:version]>` (needs a `public_repo`
 `GITHUB_TOKEN`), or open an issue with the **`source-submission`** label and the
 config in a ` ```toml ` block. Submissions are always `[[sources]]` fragments — a tool is
 just a `type = "tool"` source. A submitted data source **must declare a `checksum`**

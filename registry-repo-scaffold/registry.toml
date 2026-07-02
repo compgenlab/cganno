@@ -1,4 +1,4 @@
-# vant public data registry — catalog of source/release configs (NOT the data).
+# vant public data registry — catalog of source/snapshot configs (NOT the data).
 # Served as a static file; vant fetches it over HTTPS. Each entry's `file` is a
 # path (relative to this file's directory) to a config snippet. The on-disk name is
 # free (the client loads whatever `file` says); the convention is
@@ -15,10 +15,10 @@
 # latest      = true   # resolved for `clinvar` / `clinvar:latest` (versions aren't auto-sorted)
 # description = "ClinVar clinical significance"
 #
-# [[releases]]
+# [[snapshots]]
 # name        = "2026-06"
-# file        = "releases/2026-06.toml"
-# description = "GRCh38 starter release"
+# file        = "snapshots/2026-06.toml"
+# description = "GRCh38 starter snapshot"
 
 # A "build" source: its [[sources.build]] recipe + co-located helper script
 # (alongside the fragment) ship together, so `vant registry add-source` pulls both
