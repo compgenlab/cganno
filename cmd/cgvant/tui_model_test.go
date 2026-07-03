@@ -288,3 +288,88 @@ func TestEditorConfigRoundTrip(t *testing.T) {
 		t.Errorf("backend = %q", raw.Database.Backend)
 	}
 }
+
+// TestEditorSourceMenuSelectDefaults: opening an existing source in a snapshot shows a
+// menu; "select default annotations" toggles only THIS source's names in the manifest's
+// default_annotations, leaving another source's defaults intact.
+func TestEditorSourceMenuSelectDefaults(t *testing.T) {
+	m := newTestEditor(t)
+
+	// A source with two annotations, referenced by the snapshot; snapshot already
+	// defaults an annotation belonging to a *different* source ("other_x").
+	if err := config.WriteFragment(m.cfg.SourceFile("clinvar", "2026-01"), &config.Snapshot{Sources: []config.Source{{
+		Name: "clinvar", Version: "2026-01", Format: "vcf", URL: "https://x/c.vcf.gz",
+		Annotations: []config.Annotation{
+			{Name: "clinvar_sig", Field: "CLNSIG", Type: "categorical"},
+			{Name: "clinvar_pos", Type: "flag"},
+		},
+	}}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.WriteSnapshotConfig(m.cfg.SnapshotFile("s"), &config.SnapshotConfig{
+		Assembly: "GRCh38", Sources: []string{"clinvar:2026-01"}, Defaults: []string{"other_x"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Open the source (snapshot mode) → menu is shown.
+	m.curSnap, m.libraryMode = "s", false
+	m.openSource(m.cfg.SourceFile("clinvar", "2026-01"))
+	m.toSourceMenu()
+	kinds := map[string]bool{}
+	for _, it := range m.list.Items() {
+		kinds[it.(item).kind] = true
+	}
+	if !kinds["editsrc"] || !kinds["seldef"] {
+		t.Fatalf("source menu missing edit/select items: %v", kinds)
+	}
+
+	// Select clinvar_sig as a default for this source, then save.
+	m.toSourceDefaults()
+	m.defaultAnns = []string{"clinvar_sig"}
+	if err := m.saveSourceDefaults(); err != nil {
+		t.Fatalf("saveSourceDefaults: %v", err)
+	}
+	sc, err := config.ReadSnapshotConfig(m.cfg.SnapshotFile("s"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := stringSet(sc.Defaults)
+	if !got["clinvar_sig"] {
+		t.Errorf("clinvar_sig not marked default: %v", sc.Defaults)
+	}
+	if !got["other_x"] {
+		t.Errorf("another source's default (other_x) was dropped: %v", sc.Defaults)
+	}
+	if got["clinvar_pos"] {
+		t.Errorf("clinvar_pos should not be default: %v", sc.Defaults)
+	}
+}
+
+// TestEditorLibraryMenuEditAnnotationsPersists: in the library, the source menu offers
+// "edit annotations", and adding one persists to the fragment immediately (no form Save).
+func TestEditorLibraryMenuEditAnnotationsPersists(t *testing.T) {
+	m := newTestEditor(t)
+	if err := config.WriteFragment(m.cfg.SourceFile("cadd", "1.7"), &config.Snapshot{Sources: []config.Source{{
+		Name: "cadd", Version: "1.7", Format: "tab", RefCol: 3, AltCol: 4, URL: "https://x/cadd.gz",
+	}}}); err != nil {
+		t.Fatal(err)
+	}
+	m.libraryMode, m.curSnap = true, ""
+	m.openSource(m.cfg.SourceFile("cadd", "1.7"))
+	m.toSourceMenu()
+	// library menu → "edit annotations"
+	m.annFromForm = false
+	m.curSource.Annotations = append(m.curSource.Annotations,
+		config.Annotation{Name: "cadd_phred", Field: "6", Type: "numeric"})
+	m.persistCurSource()
+
+	frag, err := config.ReadFragment(m.cfg.SourceFile("cadd", "1.7"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(frag.Sources) != 1 || len(frag.Sources[0].Annotations) != 1 ||
+		frag.Sources[0].Annotations[0].Name != "cadd_phred" {
+		t.Fatalf("annotation not persisted to fragment: %+v", frag.Sources)
+	}
+}

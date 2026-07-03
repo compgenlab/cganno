@@ -91,9 +91,11 @@ const (
 	scrConfig
 	scrSnapshots
 	scrFragments
+	scrSourceMenu
 	scrSourceForm
 	scrAnnotations
 	scrAnnForm
+	scrSourceDefaults
 	scrBuiltins
 	scrConfirm
 	scrNewSnap
@@ -120,6 +122,7 @@ type editModel struct {
 	curSource   *config.Source
 	annIdx      int
 	libraryMode bool // editing a source in the top-level library (not within a snapshot)
+	annFromForm bool // annotations editor entered from the source form (vs the source menu)
 
 	// config.toml editor scratch (raw config; $CGVANT_HOME literals preserved)
 	cfgEdit       *config.Config
@@ -150,7 +153,7 @@ func (m *editModel) Init() tea.Cmd { return nil }
 func (m *editModel) isForm() bool {
 	switch m.screen {
 	case scrSourceForm, scrAnnForm, scrConfirm, scrNewSnap, scrBuiltinArgs,
-		scrSnapMembers, scrSnapDefaults, scrConfig:
+		scrSnapMembers, scrSnapDefaults, scrSourceDefaults, scrConfig:
 		return true
 	}
 	return false
@@ -255,7 +258,7 @@ func (m *editModel) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			switch sel.kind {
 			case "source":
 				m.openSource(sel.payload)
-				return m, m.toSourceForm()
+				return m, m.toSourceMenu()
 			case "builtin", "addbuiltin":
 				return m, m.toBuiltins("")
 			case "addsource":
@@ -289,20 +292,39 @@ func (m *editModel) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, m.toSnapDefaults()
 		case "enter":
 			switch sel.kind {
-			case "source": // edit an already-included source in place
+			case "source": // open an already-included source (edit / select defaults)
 				m.openSource(sel.payload)
-				return m, m.toSourceForm()
+				return m, m.toSourceMenu()
 			case "builtin":
 				return m, m.toBuiltins(m.curSnap)
+			}
+		}
+	case scrSourceMenu:
+		switch msg.String() {
+		case "esc", "q":
+			return m, m.srcReturn()
+		case "enter":
+			switch sel.kind {
+			case "editsrc":
+				return m, m.toSourceForm()
+			case "editann":
+				m.annFromForm = false
+				return m, m.toAnnotations()
+			case "seldef":
+				return m, m.toSourceDefaults()
 			}
 		}
 	case scrAnnotations:
 		switch msg.String() {
 		case "esc", "q":
-			return m, m.toSourceForm()
+			if m.annFromForm {
+				return m, m.toSourceForm()
+			}
+			return m, m.toSourceMenu()
 		case "d":
 			if sel.kind == "ann" {
 				m.curSource.Annotations = remove(m.curSource.Annotations, sel.idx)
+				m.persistCurSource()
 				return m, m.toAnnotations()
 			}
 		case "enter":
@@ -371,6 +393,7 @@ func (m *editModel) onFormComplete() tea.Cmd {
 	case scrSourceForm:
 		switch m.action {
 		case "annotations":
+			m.annFromForm = true
 			return m.toAnnotations()
 		case "delete":
 			return m.toConfirm(m.curPath)
@@ -388,6 +411,7 @@ func (m *editModel) onFormComplete() tea.Cmd {
 		case "delete":
 			if m.annIdx >= 0 {
 				m.curSource.Annotations = remove(m.curSource.Annotations, m.annIdx)
+				m.persistCurSource()
 			}
 			return m.toAnnotations()
 		case "cancel":
@@ -406,6 +430,7 @@ func (m *editModel) onFormComplete() tea.Cmd {
 			} else {
 				m.curSource.Annotations = append(m.curSource.Annotations, m.annWork)
 			}
+			m.persistCurSource()
 			return m.toAnnotations()
 		}
 	case scrConfirm:
@@ -439,6 +464,11 @@ func (m *editModel) onFormComplete() tea.Cmd {
 			m.err = err
 		}
 		return m.toFragments(m.curSnap)
+	case scrSourceDefaults:
+		if err := m.saveSourceDefaults(); err != nil {
+			m.err = err
+		}
+		return m.toSourceMenu()
 	}
 	return nil
 }
@@ -449,6 +479,8 @@ func (m *editModel) onFormAbort() tea.Cmd {
 		return m.srcReturn()
 	case scrAnnForm:
 		return m.toAnnotations()
+	case scrSourceDefaults:
+		return m.toSourceMenu()
 	case scrConfig:
 		return m.toHome()
 	case scrNewSnap:
@@ -820,6 +852,97 @@ func (m *editModel) openSource(path string) {
 	}
 }
 
+// persistCurSource writes the working source back to its fragment, but only when it's
+// an existing file (curPath set). A brand-new source (curPath == "") is persisted by the
+// source form's Save instead, so it can still be cancelled.
+func (m *editModel) persistCurSource() {
+	if m.curPath == "" || m.curSource == nil {
+		return
+	}
+	if err := config.WriteFragment(m.curPath, &config.Snapshot{Sources: []config.Source{*m.curSource}}); err != nil {
+		m.err = err
+	}
+}
+
+// toSourceMenu is the chooser shown when opening an *existing* source: edit the source
+// config, or (in a snapshot) pick which of its annotations are that snapshot's defaults.
+func (m *editModel) toSourceMenu() tea.Cmd {
+	m.screen = scrSourceMenu
+	items := []list.Item{
+		item{title: "Edit source", desc: "name, url, format, and annotation fields", kind: "editsrc"},
+	}
+	if m.libraryMode || m.curSnap == "" {
+		items = append(items, item{title: "Edit annotations",
+			desc: "add / edit this source's annotation fields", kind: "editann"})
+	} else {
+		items = append(items, item{title: "Select default annotations",
+			desc: "mark this source's annotations as defaults for " + m.curSnap, kind: "seldef"})
+	}
+	m.setList(items)
+	return nil
+}
+
+// sourceAnnNames is the annotation names this source publishes (builtins use their
+// builtin name; data/tool sources use the annotation name).
+func (m *editModel) sourceAnnNames() []string {
+	var names []string
+	builtin := m.curSource != nil && m.curSource.IsBuiltinSource()
+	if m.curSource == nil {
+		return names
+	}
+	for _, a := range m.curSource.Annotations {
+		if builtin {
+			names = append(names, a.Builtin)
+		} else {
+			names = append(names, a.Name)
+		}
+	}
+	return names
+}
+
+// toSourceDefaults picks which of THIS source's annotations are defaults for the current
+// snapshot (a per-source view of the snapshot's default_annotations). Snapshot mode only.
+func (m *editModel) toSourceDefaults() tea.Cmd {
+	m.screen = scrSourceDefaults
+	names := m.sourceAnnNames()
+	if len(names) == 0 {
+		m.err = fmt.Errorf("this source has no annotations to select")
+		return m.toSourceMenu()
+	}
+	sc, err := config.ReadSnapshotConfig(m.cfg.SnapshotFile(m.curSnap))
+	if err != nil {
+		m.err = err
+		return m.toSourceMenu()
+	}
+	m.defaultAnns = filterIn(sc.Defaults, stringSet(names)) // this source's currently-default names
+	m.form = huh.NewForm(huh.NewGroup(
+		huh.NewMultiSelect[string]().Title("default annotations for "+srcName(m.curSource)).
+			Description("checked = applied by default in snapshot "+m.curSnap).
+			Options(selectedOptions(names, m.defaultAnns)...).Value(&m.defaultAnns),
+	)).WithTheme(formTheme()).WithShowHelp(true)
+	m.sizeForm()
+	return m.form.Init()
+}
+
+// saveSourceDefaults merges this source's selected defaults into the snapshot manifest,
+// leaving other sources' defaults untouched.
+func (m *editModel) saveSourceDefaults() error {
+	file := m.cfg.SnapshotFile(m.curSnap)
+	sc, err := config.ReadSnapshotConfig(file)
+	if err != nil {
+		return err
+	}
+	mine := stringSet(m.sourceAnnNames())
+	kept := sc.Defaults[:0:0]
+	for _, d := range sc.Defaults { // keep defaults that belong to OTHER sources
+		if !mine[d] {
+			kept = append(kept, d)
+		}
+	}
+	sc.Defaults = append(kept, m.defaultAnns...)
+	return config.WriteSnapshotConfig(file, sc)
+}
+
 func (m *editModel) toSourceForm() tea.Cmd {
 	m.screen = scrSourceForm
 	s := m.curSource
@@ -1084,10 +1207,12 @@ func (m *editModel) breadcrumb() string {
 		parts = append(parts, "snapshots", "new")
 	case scrFragments:
 		parts = append(parts, m.curSnap)
-	case scrSourceForm:
+	case scrSourceMenu, scrSourceForm:
 		parts = append(parts, m.ctxLabel(), srcName(m.curSource))
 	case scrAnnotations, scrAnnForm:
 		parts = append(parts, m.ctxLabel(), srcName(m.curSource), "annotations")
+	case scrSourceDefaults:
+		parts = append(parts, m.ctxLabel(), srcName(m.curSource), "defaults")
 	case scrBuiltins, scrBuiltinArgs:
 		parts = append(parts, m.ctxLabel(), "builtins")
 	case scrSnapMembers:
@@ -1139,8 +1264,10 @@ func (m *editModel) hints() [][2]string {
 		return [][2]string{{"enter", "open"}, {"n", "new"}, {"/", "filter"}, {"q", "back"}}
 	case scrFragments:
 		return [][2]string{{"m", "select sources"}, {"d", "defaults"}, {"enter", "edit"}, {"q", "back"}}
-	case scrSnapMembers, scrSnapDefaults:
+	case scrSnapMembers, scrSnapDefaults, scrSourceDefaults:
 		return [][2]string{{"space", "toggle"}, {"enter", "save"}, {"^g", "cancel"}}
+	case scrSourceMenu:
+		return [][2]string{{"enter", "open"}, {"q", "back"}}
 	case scrAnnotations:
 		return [][2]string{{"enter", "edit"}, {"d", "delete"}, {"q", "back"}}
 	case scrBuiltins:
