@@ -11,7 +11,9 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -41,6 +43,7 @@ func Run(ctx context.Context, t config.Tool, p Params) error {
 	if len(t.Steps) == 0 {
 		return fmt.Errorf("tool %s: no steps defined", t.ID())
 	}
+	warnMissingAssets(t, t.Steps)
 	if err := stageAssets(t, p); err != nil {
 		return fmt.Errorf("tool %s: %w", t.ID(), err)
 	}
@@ -68,6 +71,7 @@ func PullImage(ctx context.Context, t config.Tool, dest string) error {
 // tool's data into p.Datadir. Container setup steps run inside the image with the
 // data dir bound. No-op when the tool has no setup.
 func Setup(ctx context.Context, t config.Tool, p Params) error {
+	warnMissingAssets(t, t.Setup)
 	if err := stageAssets(t, p); err != nil {
 		return fmt.Errorf("tool %s: %w", t.ID(), err)
 	}
@@ -103,6 +107,57 @@ func stageAssets(t config.Tool, p Params) error {
 		}
 	}
 	return nil
+}
+
+// Recognize {workdir}/<file> used as a script or stdin input (must pre-exist) vs.
+// produced as an output (-o / > / >>). A workdir-relative filename stops at shell
+// metacharacters so pipelines parse.
+var (
+	wdScriptRef = regexp.MustCompile(`(?:python3?|perl|bash|sh|Rscript)\s+\{workdir\}/([^\s;|&<>()]+)`)
+	wdStdinRef  = regexp.MustCompile(`<\s*\{workdir\}/([^\s;|&<>()]+)`)
+	wdOutputRef = regexp.MustCompile(`(?:-o\s+|>>?\s*)\{workdir\}/([^\s;|&<>()]+)`)
+)
+
+// warnMissingAssets prints (to stderr) a warning for each {workdir}/<file> a step
+// uses as a script or stdin input that is neither a declared `asset` nor produced by
+// a step — the common "forgot to add the helper script to `assets`" mistake. It only
+// warns (the step will still run and fail if the file is genuinely absent).
+func warnMissingAssets(t config.Tool, steps []config.Step) {
+	for _, name := range missingAssets(t, steps) {
+		fmt.Fprintf(os.Stderr, "warning: tool %s: a step reads {workdir}/%s but it is not a declared `asset` nor produced by a step — add %q to the source's `assets`\n", t.ID(), name, name)
+	}
+}
+
+// missingAssets returns the base names of {workdir}/<file> inputs (scripts / stdin)
+// that are neither declared assets nor produced by a step output. Order-stable, deduped.
+func missingAssets(t config.Tool, steps []config.Step) []string {
+	have := map[string]bool{}
+	for _, a := range t.Assets {
+		have[path.Base(a)] = true
+	}
+	if t.Output != "" {
+		have[path.Base(t.Output)] = true
+	}
+	for _, s := range steps { // files a step produces are available to later steps
+		for _, m := range wdOutputRef.FindAllStringSubmatch(s.Run, -1) {
+			have[path.Base(m[1])] = true
+		}
+	}
+	var out []string
+	seen := map[string]bool{}
+	for _, re := range []*regexp.Regexp{wdScriptRef, wdStdinRef} {
+		for _, s := range steps {
+			for _, m := range re.FindAllStringSubmatch(s.Run, -1) {
+				name := path.Base(m[1])
+				if name == "" || name == "." || have[name] || seen[name] {
+					continue
+				}
+				seen[name] = true
+				out = append(out, name)
+			}
+		}
+	}
+	return out
 }
 
 // threadsOf is the per-run thread count (>=1).

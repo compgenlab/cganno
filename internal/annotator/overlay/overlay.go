@@ -78,8 +78,10 @@ func extract(l model.Locus, sourceID string, a config.Annotation, rec *vcf.VcfRe
 		return model.AnnRow{}, false
 	}
 	row := model.AnnRow{Locus: l, DataSource: sourceID, Key: a.Name}
-	if a.IsFlag() { // present (the annotator added the flag) ⇒ true
-		row.Value = model.Text("true")
+	if a.IsFlag() {
+		// A present flag renders as the tag name (a no-match is absent → blank),
+		// rather than "true"/"false" — so a TSV cell reads e.g. "CLINVAR_MATCH".
+		row.Value = model.Text(a.Name)
 		return row, true
 	}
 	if av.IsMissing() {

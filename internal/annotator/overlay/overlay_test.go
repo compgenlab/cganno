@@ -264,8 +264,9 @@ func TestOverlayVCFKnobs(t *testing.T) {
 
 	// Exact A>G: all four fire.
 	m := rowsByKey(mustAnnotate(t, s, model.Locus{Chrom: "chr1", Pos: 100, Ref: "A", Alt: "G"}))
-	if m["clinvar_match"].Str != "true" || m["clinvar_pos"].Str != "true" {
-		t.Errorf("flags: match=%q pos=%q, want true/true", m["clinvar_match"].Str, m["clinvar_pos"].Str)
+	// A present flag renders as its tag name (not "true").
+	if m["clinvar_match"].Str != "clinvar_match" || m["clinvar_pos"].Str != "clinvar_pos" {
+		t.Errorf("flags: match=%q pos=%q, want the tag names", m["clinvar_match"].Str, m["clinvar_pos"].Str)
 	}
 	if m["dbsnp_id"].Str != "rs1" {
 		t.Errorf("dbsnp_id = %q, want rs1", m["dbsnp_id"].Str)
@@ -282,8 +283,8 @@ func TestOverlayVCFKnobs(t *testing.T) {
 	if _, ok := m2["clinvar_sig"]; ok {
 		t.Error("clinvar_sig should be absent for a non-matching allele (exact)")
 	}
-	if m2["clinvar_pos"].Str != "true" {
-		t.Errorf("clinvar_pos = %q, want true (position match)", m2["clinvar_pos"].Str)
+	if m2["clinvar_pos"].Str != "clinvar_pos" {
+		t.Errorf("clinvar_pos = %q, want the tag name (position match)", m2["clinvar_pos"].Str)
 	}
 }
 

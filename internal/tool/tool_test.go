@@ -200,3 +200,28 @@ func TestNoSteps(t *testing.T) {
 		t.Fatal("expected error for a tool with no steps")
 	}
 }
+
+// TestMissingAssets: a helper script read via {workdir}/x that isn't declared in
+// `assets` (nor produced by a step) is flagged; a declared asset and a step-produced
+// intermediate are not.
+func TestMissingAssets(t *testing.T) {
+	tl := config.Tool{
+		Output: "vep.vcf.gz",
+		Assets: []string{"expand_vep_vcf.py"}, // declared
+		Steps: []config.Step{
+			{Run: "vep -i {input} -o {workdir}/vep.vcf --fasta {ref}"}, // produces vep.vcf
+			{Run: "python3 {workdir}/expand_vep_vcf.py < {workdir}/vep.vcf | python3 {workdir}/worst.py | cgvant bgzip > {output}"},
+		},
+	}
+	got := missingAssets(tl, tl.Steps)
+	// expand_vep_vcf.py is declared, vep.vcf is produced by step 1 → only worst.py is missing.
+	if len(got) != 1 || got[0] != "worst.py" {
+		t.Fatalf("missingAssets = %v, want [worst.py]", got)
+	}
+
+	// Declaring it clears the warning.
+	tl.Assets = append(tl.Assets, "worst.py")
+	if got := missingAssets(tl, tl.Steps); len(got) != 0 {
+		t.Errorf("after declaring, missingAssets = %v, want none", got)
+	}
+}
