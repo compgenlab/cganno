@@ -16,11 +16,15 @@ import (
 // mountpoint and renders the placeholders to those in-container paths (host-
 // independent, so the engine never recreates a deep host path inside the image).
 func TestContainerMapping(t *testing.T) {
+	// Ref/input dirs are only bound when they exist on the host (so tool setup with
+	// no reference yet doesn't fail on a missing mount), so give them real dirs.
+	refDir := t.TempDir()
+	inDir := t.TempDir()
 	p := Params{
 		Datadir: "/home/u/deep/cache/tools/vep/113",
 		Workdir: "/tmp/cgvant-xyz",
-		Ref:     "/refs/GRCh38.fa",
-		Input:   "/data/in.vcf",
+		Ref:     filepath.Join(refDir, "GRCh38.fa"),
+		Input:   filepath.Join(inDir, "in.vcf"),
 		Output:  "/tmp/cgvant-xyz/vep.vcf.gz",
 		Image:   "/img/vep.sif",
 	}
@@ -29,8 +33,8 @@ func TestContainerMapping(t *testing.T) {
 	wantBinds := []string{
 		"-B", "/home/u/deep/cache/tools/vep/113:/cgvant/data",
 		"-B", "/tmp/cgvant-xyz:/cgvant/work",
-		"-B", "/refs:/cgvant/ref",
-		"-B", "/data:/cgvant/in",
+		"-B", refDir + ":/cgvant/ref",
+		"-B", inDir + ":/cgvant/in",
 	}
 	if strings.Join(binds, " ") != strings.Join(wantBinds, " ") {
 		t.Errorf("binds = %v\nwant %v", binds, wantBinds)
@@ -40,6 +44,31 @@ func TestContainerMapping(t *testing.T) {
 	want := "vep -i /cgvant/in/in.vcf -o /cgvant/work/vep.vcf.gz --dir_cache /cgvant/data --fasta /cgvant/ref/GRCh38.fa --work /cgvant/work"
 	if got != want {
 		t.Errorf("render =\n %q\nwant\n %q", got, want)
+	}
+}
+
+// TestContainerMappingMissingRef: a reference/input whose dir doesn't exist is NOT
+// bound (so tool setup won't fail on a not-yet-configured FASTA), but {ref} still
+// renders its in-container path.
+func TestContainerMappingMissingRef(t *testing.T) {
+	p := Params{
+		Datadir: "/cache/vep",
+		Workdir: "/tmp/wd",
+		Ref:     "/does/not/exist/GRCh38.fa",
+		Image:   "/img/vep.sif",
+	}
+	repl, binds := containerMapping(config.Tool{}, p)
+	for _, b := range binds {
+		if strings.Contains(b, "/cgvant/ref") {
+			t.Errorf("missing ref dir should not be bound, got %v", binds)
+		}
+	}
+	if got := repl.Replace("INSTALL.pl -c {datadir}"); got != "INSTALL.pl -c /cgvant/data" {
+		t.Errorf("setup render = %q", got)
+	}
+	// {ref} still maps to the in-container path (a step that uses it fails clearly).
+	if got := repl.Replace("--fasta {ref}"); got != "--fasta /cgvant/ref/GRCh38.fa" {
+		t.Errorf("ref render = %q", got)
 	}
 }
 

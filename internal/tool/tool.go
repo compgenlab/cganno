@@ -150,14 +150,22 @@ func containerMapping(t config.Tool, p Params) (*strings.Replacer, []string) {
 	bind(p.Datadir, data)
 	bind(p.Workdir, work)
 
+	// Only bind the reference/input dirs when they exist on the host. A step that
+	// doesn't use {ref}/{input} (e.g. tool setup) must not fail because the reference
+	// FASTA isn't set up yet; a step that DOES use a missing {ref} still renders the
+	// in-container path and fails clearly ("no such file") rather than on a mount hook.
 	ref := ""
 	if p.Ref != "" {
-		bind(filepath.Dir(p.Ref), ctrRoot+"/ref")
+		if dirExists(filepath.Dir(p.Ref)) {
+			bind(filepath.Dir(p.Ref), ctrRoot+"/ref")
+		}
 		ref = ctrRoot + "/ref/" + filepath.Base(p.Ref)
 	}
 	input := ""
 	if p.Input != "" {
-		bind(filepath.Dir(p.Input), ctrRoot+"/in")
+		if dirExists(filepath.Dir(p.Input)) {
+			bind(filepath.Dir(p.Input), ctrRoot+"/in")
+		}
 		input = ctrRoot + "/in/" + filepath.Base(p.Input)
 	}
 	// Output is always written under the workdir (filepath.Join(workdir, OutputName)),
@@ -282,6 +290,11 @@ func stepLabel(s config.Step, i int) string {
 func fileExists(p string) bool {
 	fi, err := os.Stat(p)
 	return err == nil && !fi.IsDir()
+}
+
+func dirExists(p string) bool {
+	fi, err := os.Stat(p)
+	return err == nil && fi.IsDir()
 }
 
 func maxInt(a, b int) int {
