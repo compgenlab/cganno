@@ -53,7 +53,7 @@ func TestAnnotateVCFWithTool(t *testing.T) {
 		t.Fatal(err)
 	}
 	out := filepath.Join(dir, "out.vcf")
-	if err := AnnotateVCFSnapshot(context.Background(), &config.Config{}, rel, in, out, nil); err != nil {
+	if err := AnnotateVCFSnapshot(context.Background(), &config.Config{}, rel, in, out, nil, 1, false); err != nil {
 		t.Fatal(err)
 	}
 
@@ -197,7 +197,7 @@ func TestAnnotateVCFToolCached(t *testing.T) {
 			t.Fatal(err)
 		}
 		out := filepath.Join(dir, name+".out.vcf")
-		if err := AnnotateVCFSnapshot(ctx, &config.Config{}, rel, in, out, st); err != nil {
+		if err := AnnotateVCFSnapshot(ctx, &config.Config{}, rel, in, out, st, 1, false); err != nil {
 			t.Fatalf("%s: %v", name, err)
 		}
 		data, err := os.ReadFile(out)

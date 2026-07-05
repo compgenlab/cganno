@@ -36,6 +36,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -126,6 +127,8 @@ func run(args []string) error {
 		return cmdBgzip(cmdArgs)
 	case "tabix": // hidden: write a tabix index (mimics tabix) for recipes/tool scripts
 		return cmdTabix(cmdArgs)
+	case "vcf-merge": // combine same-order per-source VCFs (the annotate -t fan-out merge)
+		return cmdVcfMerge(cmdArgs)
 	}
 
 	// `versions` needs the engine (config + snapshot + store + annotator).
@@ -263,11 +266,17 @@ func cmdAnnotate(ctx context.Context, cfgPath, snapshot string, args []string) e
 	out := fs.String("o", "", "write output to this file (default: stdout)")
 	format := fs.String("format", "tab", "output format: tab|vcf|json|text")
 	all := fs.Bool("all", false, "apply all annotations (else the default-marked set)")
+	threads := fs.Int("threads", 1, "vcf output: annotate this many sources in parallel (0 = all CPUs); each runs a full pass to a temp file, then merges")
+	fs.IntVar(threads, "t", 1, "shorthand for --threads")
+	keepTemp := fs.Bool("keep-temp", false, "vcf output: keep the per-source temp part files (for debugging the fan-out)")
 	var keys stringList
 	fs.Var(&keys, "annotation", "annotation name to apply (repeatable, comma-separated)")
 	fs.Var(&keys, "a", "shorthand for --annotation")
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	if *threads <= 0 {
+		*threads = runtime.NumCPU()
 	}
 	rest := fs.Args()
 	if *all && len(keys) > 0 {
@@ -314,7 +323,7 @@ func cmdAnnotate(ctx context.Context, cfgPath, snapshot string, args []string) e
 			return err
 		}
 		defer cleanup()
-		return annotatepkg.AnnotateVCFSnapshot(ctx, cfg, &sub, inPath, *out, st)
+		return annotatepkg.AnnotateVCFSnapshot(ctx, cfg, &sub, inPath, *out, st, *threads, *keepTemp)
 	}
 
 	if *format != "tab" && *format != "json" && *format != "text" {

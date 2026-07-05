@@ -31,32 +31,36 @@ import (
 // sources + builtins. When st is non-nil, tool output is cached per locus so each
 // tool runs only on loci it hasn't seen before (see runToolCached); pass nil to
 // always run the tool over the whole input.
-func AnnotateVCFSnapshot(ctx context.Context, cfg *config.Config, snap *config.Snapshot, inPath, outPath string, st store.Store) error {
+func AnnotateVCFSnapshot(ctx context.Context, cfg *config.Config, snap *config.Snapshot, inPath, outPath string, st store.Store, threads int, keepTemp bool) error {
+	// The "effective" snapshot is the one the pipeline runs over: with tool sources
+	// resolved to their generated output files. With no tools it is the snapshot itself.
+	eff := snap
 	toolSources := snap.ToolSources()
-	if len(toolSources) == 0 {
-		p, err := BuildPipeline(snap, cfg.ResolveSourceFiles)
+	if len(toolSources) > 0 {
+		workdir, err := os.MkdirTemp("", "cgvant-tools-")
 		if err != nil {
 			return err
 		}
-		return AnnotateVCF(p, inPath, outPath)
+		defer os.RemoveAll(workdir)
+
+		toolSrcs, err := runTools(ctx, cfg, toolSources, st, inPath, workdir, snap.Reference, snap.Assembly)
+		if err != nil {
+			return err
+		}
+		// Replace the tool-type sources with their generated output sources, so the
+		// pipeline reads the produced files (by name) rather than the tool fragments.
+		aug := *snap
+		aug.Sources = append(nonToolSources(snap.Sources), toolSrcs...)
+		eff = &aug
 	}
 
-	workdir, err := os.MkdirTemp("", "cgvant-tools-")
-	if err != nil {
-		return err
+	// threads > 1 fans out: one annotation pass per source into a temp part VCF (up
+	// to `threads` concurrently), then merges the parts. threads <= 1 keeps the
+	// single sequential pass.
+	if threads > 1 {
+		return annotateVCFFanOut(cfg, eff, inPath, outPath, threads, keepTemp)
 	}
-	defer os.RemoveAll(workdir)
-
-	toolSrcs, err := runTools(ctx, cfg, toolSources, st, inPath, workdir, snap.Reference, snap.Assembly)
-	if err != nil {
-		return err
-	}
-	// Replace the tool-type sources with their generated output sources, so the
-	// pipeline reads the produced files (by name) rather than the tool fragments.
-	aug := *snap
-	aug.Sources = append(nonToolSources(snap.Sources), toolSrcs...)
-
-	p, err := BuildPipeline(&aug, cfg.ResolveSourceFiles)
+	p, err := BuildPipeline(eff, cfg.ResolveSourceFiles)
 	if err != nil {
 		return err
 	}

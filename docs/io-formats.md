@@ -61,6 +61,30 @@ The `tab` output columns are fixed (`chrom pos ref alt` + one per annotation) an
 unrelated to a `tab` *source's* `ref_col`/`alt_col` (which describe how that source file is
 *read*).
 
+### Parallel VCF annotation (`-t`)
+
+For `--format vcf`, **`-t N`** (`--threads N`) annotates up to `N` sources at once. Each job
+runs a full pass over the input for **one source** (a multi-file source — per-chromosome, or a
+`files`/per-alt set — expands to **one job per file**, so those parallelize file-by-file) into a
+temporary `.vcf.gz`, then the parts are merged positionally back into `-o` (or stdout). `-t 0`
+uses all CPUs; `-t 1` (the default) is the plain single pass. `--keep-temp` retains the per-source
+temp parts for debugging. The builtins (incl. `vardist` and the sample-derived FORMAT builtins)
+run together in one part, so ordering-sensitive and per-sample builtins stay correct.
+
+```sh
+cgvant annotate --format vcf -t 8 -o out.vcf.gz in.vcf.gz   # 8 sources at a time
+```
+
+Because the parts hold the same sites in the same order, they can also be recombined by hand —
+useful for a distributed (per-source, e.g. HPC) fan-out — with the `vcf-merge` subcommand:
+
+```sh
+cgvant vcf-merge -o out.vcf.gz part.A.vcf.gz part.B.vcf.gz …   # same-order INFO/FORMAT combine
+```
+
+`vcf-merge` is a *column* combine (identical sites, identical order — only INFO/FORMAT differ),
+**not** a bcftools-style site merge.
+
 ---
 
 ## Tool source I/O
