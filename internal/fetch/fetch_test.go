@@ -193,7 +193,7 @@ func TestSourceExplicitIndexURL(t *testing.T) {
 func TestToolsSetupOnce(t *testing.T) {
 	cfg := &config.Config{DataDir: t.TempDir()}
 	rel := &config.Snapshot{Sources: []config.Source{{
-		Type: "tool", Name: "vep", Version: "112", Runner: "local",
+		Type: "tool", Name: "vep", Version: "112",
 		Setup: []config.Step{{Run: "touch {datadir}/installed"}},
 	}}}
 	ctx := context.Background()
@@ -226,8 +226,8 @@ func TestToolsSetupOnce(t *testing.T) {
 func TestToolsOnlyFilter(t *testing.T) {
 	cfg := &config.Config{DataDir: t.TempDir()}
 	rel := &config.Snapshot{Name: "2026-06", Sources: []config.Source{
-		{Type: "tool", Name: "vep", Version: "112", Runner: "local", Setup: []config.Step{{Run: "touch {datadir}/installed"}}},
-		{Type: "tool", Name: "cadd", Version: "1.7", Runner: "local", Setup: []config.Step{{Run: "touch {datadir}/installed"}}},
+		{Type: "tool", Name: "vep", Version: "112", Setup: []config.Step{{Run: "touch {datadir}/installed"}}},
+		{Type: "tool", Name: "cadd", Version: "1.7", Setup: []config.Step{{Run: "touch {datadir}/installed"}}},
 	}}
 	ctx := context.Background()
 

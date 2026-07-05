@@ -90,7 +90,7 @@ func TestStageAssets(t *testing.T) {
 		t.Fatal(err)
 	}
 	tl := config.Tool{
-		Name: "t", Version: "1", Runner: "local",
+		Name: "t", Version: "1",
 		Assets: []string{"helper.sh"},
 		Setup:  []config.Step{{Name: "run", Run: "sh {workdir}/helper.sh"}},
 	}
@@ -119,7 +119,7 @@ func TestSetupLocal(t *testing.T) {
 		t.Fatal(err)
 	}
 	tl := config.Tool{
-		Name: "vep", Version: "112", Runner: "local",
+		Name: "vep", Version: "112",
 		Setup: []config.Step{{Name: "install", Run: "touch {datadir}/installed"}},
 	}
 	if err := Setup(context.Background(), tl, Params{Datadir: datadir, Workdir: dir}); err != nil {
@@ -167,20 +167,7 @@ func TestRunLocal(t *testing.T) {
 	pre := prebuiltTab(t, dir)
 	runOK(t, config.Tool{
 		Name: "x", Version: "1", Format: "tab",
-		Runner: "local",
-		Steps:  []config.Step{copyStep(pre)},
-	}, dir)
-}
-
-func TestRunBatchTemplate(t *testing.T) {
-	dir := t.TempDir()
-	pre := prebuiltTab(t, dir)
-	// A no-op "scheduler": the submit template just runs {cmd} locally.
-	runOK(t, config.Tool{
-		Name: "x", Version: "1", Format: "tab",
-		Runner: "batch",
-		Batch:  config.ToolBatch{Submit: "{cmd}"},
-		Steps:  []config.Step{copyStep(pre)},
+		Steps: []config.Step{copyStep(pre)},
 	}, dir)
 }
 

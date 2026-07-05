@@ -168,7 +168,7 @@ engine   = "apptainer"                         # or "singularity"
 format   = "vcf"                               # how the OUTPUT is read (vcf | tab)
 # input_format = "vcf"                          # how variants are handed IN (see io-formats)
 output   = "vep.vcf.gz"
-runner   = "local"                             # "local" (subprocess) | "batch"
+threads  = 4                                   # → {threads} (e.g. vep --fork 4); default 1
 requires = ["python3"]                         # host executables that must be on PATH
 assets   = ["expand_vep_vcf.py", "worst.py"]   # co-located helper scripts
 

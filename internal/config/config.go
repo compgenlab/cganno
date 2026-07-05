@@ -226,14 +226,13 @@ type Source struct {
 	// {input}: "vcf" (default) or a per-variant line template (placeholders {chrom}
 	// {pos} {pos0} {ref} {alt} {end}). Output is consumed like a data source of Format
 	// (vcf|tab). Setup runs once (image acquire time); Steps run per annotate.
-	Image       string    `toml:"image,omitempty"`
-	Engine      string    `toml:"engine,omitempty"`       // container exec program; default "apptainer"
-	InputFormat string    `toml:"input_format,omitempty"` // "vcf" (default) | per-variant line template
-	Output      string    `toml:"output,omitempty"`       // output filename the last step writes
-	Setup       []Step    `toml:"setup,omitempty"`        // one-time install into {datadir}
-	Runner      string    `toml:"runner,omitempty"`       // "local" (subprocess) | "batch"
-	Batch       ToolBatch `toml:"batch,omitempty"`
-	Steps       []Step    `toml:"steps,omitempty"` // per-run steps producing Output
+	Image       string `toml:"image,omitempty"`
+	Engine      string `toml:"engine,omitempty"`       // container exec program; default "apptainer"
+	InputFormat string `toml:"input_format,omitempty"` // "vcf" (default) | per-variant line template
+	Output      string `toml:"output,omitempty"`       // output filename the last step writes
+	Setup       []Step `toml:"setup,omitempty"`        // one-time install into {datadir}
+	Threads     int    `toml:"threads,omitempty"`      // per-run CPU count → {threads} (e.g. vep --fork)
+	Steps       []Step `toml:"steps,omitempty"`        // per-run steps producing Output
 	// Assets are helper files co-located with the fragment that Steps need (staged
 	// into the step workdir, referenced as {workdir}/<name>). Tool sources use this;
 	// build sources use build.assets.
@@ -255,7 +254,7 @@ func (s Source) AsTool() Tool {
 		Name: s.Name, Version: s.Version,
 		Image: s.Image, Engine: s.Engine, Output: s.Output, Format: s.Format,
 		InputFormat: s.InputFormat, RefCol: s.RefCol, AltCol: s.AltCol,
-		Setup: s.Setup, Runner: s.Runner, Batch: s.Batch, Steps: s.Steps,
+		Setup: s.Setup, Threads: s.Threads, Steps: s.Steps,
 		Requires: s.Requires, Assets: s.Assets, Annotations: s.Annotations,
 	}
 }
@@ -435,10 +434,9 @@ type Tool struct {
 
 	// Setup runs once after the image is acquired (`cgvant download`) to install the
 	// tool's data into its data dir ({datadir}, bound into container steps).
-	Setup  []Step    `toml:"setup,omitempty"`
-	Runner string    `toml:"runner,omitempty"` // "local" (subprocess) | "batch" (submit template)
-	Batch  ToolBatch `toml:"batch,omitempty"`
-	Steps  []Step    `toml:"steps"`
+	Setup   []Step `toml:"setup,omitempty"`
+	Threads int    `toml:"threads,omitempty"` // per-run CPU count → {threads} (e.g. vep --fork)
+	Steps   []Step `toml:"steps"`
 
 	// Requires lists external executables that must be on PATH for this tool to
 	// run (e.g. "python3", "bgzip"). Checked by `cgvant download` and `cgvant
@@ -464,15 +462,6 @@ func (t Tool) ImageIsRef() bool {
 	return strings.HasPrefix(t.Image, "docker://") ||
 		strings.HasPrefix(t.Image, "oras://") ||
 		strings.HasPrefix(t.Image, "shub://")
-}
-
-// ToolBatch configures the batch runner (e.g. SLURM). Submit is a template with
-// {cmd}/{mem}/{threads}/{walltime} placeholders; it should block until done.
-type ToolBatch struct {
-	Submit   string `toml:"submit,omitempty"`
-	Mem      string `toml:"mem,omitempty"`
-	Threads  int    `toml:"threads,omitempty"`
-	Walltime string `toml:"walltime,omitempty"`
 }
 
 // Step is one stage of a tool pipeline: a templated shell command, optionally run

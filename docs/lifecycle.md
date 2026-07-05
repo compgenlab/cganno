@@ -107,9 +107,9 @@ write an intermediate file that a host step post-processes.
 The last step must write `{output}` (default `<name>.<format>.gz`), which cgvant then reads
 back like a data source of the tool's `format`.
 
-**`runner`** selects how a step is executed: `local` runs it as a subprocess; `batch`
-submits it via a `[batch]` template (`submit`/`mem`/`threads`/`walltime`) that blocks
-until done — for HPC schedulers like SLURM.
+Each step runs as a local subprocess (container steps are wrapped with the tool's container
+engine). A tool's **`threads`** (default 1) fills the `{threads}` placeholder — e.g. a VEP
+step's `--fork {threads}`.
 
 ### Container mount contract
 

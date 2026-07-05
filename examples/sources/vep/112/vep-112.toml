@@ -43,7 +43,7 @@ engine   = "apptainer"                         # or "singularity"
 format   = "vcf"                               # VEP output is a VCF; pull INFO values from it
 # input_format = "vcf"                          # default; a template feeds a variant-list tool
 output   = "vep.vcf.gz"
-runner   = "local"                             # "local" (subprocess) | "batch"
+threads  = 4                                   # → {threads} (vep --fork 4)
 requires = ["python3"]                         # host deps (bgzip via `cgvant bgzip`, no external binary)
 # Helper scripts co-located with this .toml: staged into {workdir} before each run and
 # referenced as {workdir}/<name> below. Declaring them lets the registry bundle them.

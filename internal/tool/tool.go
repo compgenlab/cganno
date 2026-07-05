@@ -1,8 +1,7 @@
 // Package tool runs external (often containerized) annotators such as VEP. A
 // tool is an ordered list of templated shell steps that transform an input VCF
 // into an annotated output file (tab/vcf); the output is then consumed as a
-// normal source. Steps run via a context-selected runner: "local" (subprocess)
-// or "batch" (a submit template, e.g. `sbatch --wait`). Container steps are
+// normal source. Each step runs as a local subprocess; container steps are
 // wrapped with the tool's container engine (apptainer/singularity).
 package tool
 
@@ -160,10 +159,10 @@ func missingAssets(t config.Tool, steps []config.Step) []string {
 	return out
 }
 
-// threadsOf is the per-run thread count (>=1).
+// threadsOf is the per-run thread count for {threads} (>=1), e.g. vep --fork.
 func threadsOf(t config.Tool) int {
-	if t.Batch.Threads > 0 {
-		return t.Batch.Threads
+	if t.Threads > 0 {
+		return t.Threads
 	}
 	return 1
 }
@@ -274,23 +273,7 @@ func runStep(ctx context.Context, t config.Tool, step config.Step, idx int, p Pa
 		inner = []string{"bash", script}
 	}
 
-	switch t.Runner {
-	case "", "local":
-		return exec1(ctx, p.Workdir, inner[0], inner[1:]...)
-	case "batch":
-		if t.Batch.Submit == "" {
-			return fmt.Errorf("batch runner needs batch.submit")
-		}
-		submit := strings.NewReplacer(
-			"{cmd}", shellJoin(inner),
-			"{mem}", t.Batch.Mem,
-			"{threads}", strconv.Itoa(maxInt(t.Batch.Threads, 1)),
-			"{walltime}", t.Batch.Walltime,
-		).Replace(t.Batch.Submit)
-		return exec1(ctx, p.Workdir, "bash", "-c", submit)
-	default:
-		return fmt.Errorf("unknown runner %q (want local|batch)", t.Runner)
-	}
+	return exec1(ctx, p.Workdir, inner[0], inner[1:]...)
 }
 
 // exec1 runs a command, streaming its output to stderr (data flows through
@@ -326,15 +309,6 @@ func preset(format string) (*tabix.WriterOpts, error) {
 	}
 }
 
-// shellJoin single-quotes args for safe embedding in a submit template's {cmd}.
-func shellJoin(args []string) string {
-	q := make([]string, len(args))
-	for i, a := range args {
-		q[i] = "'" + strings.ReplaceAll(a, "'", `'\''`) + "'"
-	}
-	return strings.Join(q, " ")
-}
-
 func stepLabel(s config.Step, i int) string {
 	if s.Name != "" {
 		return s.Name
@@ -350,11 +324,4 @@ func fileExists(p string) bool {
 func dirExists(p string) bool {
 	fi, err := os.Stat(p)
 	return err == nil && fi.IsDir()
-}
-
-func maxInt(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }
