@@ -13,10 +13,6 @@ require (
 	modernc.org/sqlite v1.53.0
 )
 
-// TODO(dev): drop once hts v0.5.2 is pushed. Builds against the local hts v0.5.2
-// working tree (the tag is not yet on the module proxy). Build with GOWORK=off.
-replace github.com/compgenlab/hts => ../cgio-hts/hts
-
 require (
 	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
