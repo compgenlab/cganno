@@ -72,6 +72,35 @@ func TestContainerMappingMissingRef(t *testing.T) {
 	}
 }
 
+// TestContainerMappingRelativeInput: a RELATIVE input path (e.g. an input VCF given
+// as `sub/dir/in.vcf.gz`) must bind an ABSOLUTE host dir. The container engine
+// resolves a relative -B source against its own CWD (the tool workdir), not
+// cganno's, so a relative bind would mount a path that doesn't exist there.
+func TestContainerMappingRelativeInput(t *testing.T) {
+	tmp := t.TempDir()
+	t.Chdir(tmp)
+	if err := os.MkdirAll("sub/dir", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := Params{
+		Datadir: "/cache/vep", Workdir: "/tmp/wd",
+		Input: "sub/dir/in.vcf.gz", Image: "/img/vep.sif",
+	}
+	_, binds := containerMapping(config.Tool{}, p)
+	joined := strings.Join(binds, " ")
+	want := "-B " + filepath.Join(cwd, "sub", "dir") + ":/cganno/in"
+	if !strings.Contains(joined, want) {
+		t.Errorf("relative input must bind an ABSOLUTE host dir;\n want %q\n in   %q", want, joined)
+	}
+	if strings.Contains(joined, "-B sub/dir:") {
+		t.Errorf("bind is relative (would break the container mount): %v", binds)
+	}
+}
+
 // TestStageAssets: a declared asset (co-located in AssetDir) is staged into the
 // workdir and a host step runs it explicitly as {workdir}/<name> — no PATH reliance.
 func TestStageAssets(t *testing.T) {

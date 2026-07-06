@@ -181,6 +181,15 @@ func replacer(t config.Tool, p Params) *strings.Replacer {
 	)
 }
 
+// absDir returns p as an absolute path (resolved against cganno's CWD), or p
+// unchanged if that fails. Container binds must be absolute — see containerMapping.
+func absDir(p string) string {
+	if a, err := filepath.Abs(p); err == nil {
+		return a
+	}
+	return p
+}
+
 // ctrRoot is the fixed in-container mount root for container steps.
 const ctrRoot = "/cganno"
 
@@ -208,17 +217,22 @@ func containerMapping(t config.Tool, p Params) (*strings.Replacer, []string) {
 	// doesn't use {ref}/{input} (e.g. tool setup) must not fail because the reference
 	// FASTA isn't set up yet; a step that DOES use a missing {ref} still renders the
 	// in-container path and fails clearly ("no such file") rather than on a mount hook.
+	// Bind host directories by ABSOLUTE path: the container engine resolves a
+	// relative -B source against ITS working directory (exec1 sets that to the tool
+	// workdir), not cganno's CWD — so a relative {ref}/{input} (e.g. an input VCF
+	// given as `sub/dir/in.vcf.gz`) would mount a non-existent path under the workdir.
+	// filepath.Abs resolves against cganno's CWD, where the path is actually valid.
 	ref := ""
 	if p.Ref != "" {
-		if dirExists(filepath.Dir(p.Ref)) {
-			bind(filepath.Dir(p.Ref), ctrRoot+"/ref")
+		if dir := absDir(filepath.Dir(p.Ref)); dirExists(dir) {
+			bind(dir, ctrRoot+"/ref")
 		}
 		ref = ctrRoot + "/ref/" + filepath.Base(p.Ref)
 	}
 	input := ""
 	if p.Input != "" {
-		if dirExists(filepath.Dir(p.Input)) {
-			bind(filepath.Dir(p.Input), ctrRoot+"/in")
+		if dir := absDir(filepath.Dir(p.Input)); dirExists(dir) {
+			bind(dir, ctrRoot+"/in")
 		}
 		input = ctrRoot + "/in/" + filepath.Base(p.Input)
 	}
