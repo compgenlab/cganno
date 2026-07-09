@@ -195,9 +195,34 @@ func RunToolsForLoci(ctx context.Context, cfg *config.Config, toolSources []conf
 func BuildPipeline(cfg *config.Config, snap *config.Snapshot, resolve func(config.Source) []config.SourceFile) (*htsann.Pipeline, error) {
 	p := htsann.NewPipeline()
 
+	// Bucket each data source's annotations so the source is annotated by a single
+	// grouped annotator (one reader, one query per record) via SourceAnnotators,
+	// instead of one reader per annotation. GTF keeps its long-standing deferral to
+	// the end; every other source emits at its first appearance, interleaved with
+	// builtins, so INFO/header ordering is unchanged for the common case where a
+	// source's annotations are contiguous.
+	srcGroups := map[string][]config.Annotation{}
 	gtfGroups := map[string][]config.Annotation{}
 	var gtfOrder []string
+	for _, a := range snap.Annotations {
+		if config.IsBuiltin(a.Source) {
+			continue
+		}
+		src := snap.SourceByName(a.Source)
+		if src == nil {
+			return nil, fmt.Errorf("annotation %q: unknown source %q", a.Name, a.Source)
+		}
+		if src.IsGTFSource() {
+			if _, seen := gtfGroups[a.Source]; !seen {
+				gtfOrder = append(gtfOrder, a.Source)
+			}
+			gtfGroups[a.Source] = append(gtfGroups[a.Source], a)
+			continue
+		}
+		srcGroups[a.Source] = append(srcGroups[a.Source], a)
+	}
 
+	emitted := map[string]bool{}
 	for _, a := range snap.Annotations {
 		if config.IsBuiltin(a.Source) {
 			if a.Source == "vardist" {
@@ -212,30 +237,28 @@ func BuildPipeline(cfg *config.Config, snap *config.Snapshot, resolve func(confi
 			continue
 		}
 		src := snap.SourceByName(a.Source)
-		if src == nil {
-			return nil, fmt.Errorf("annotation %q: unknown source %q", a.Name, a.Source)
+		if src.IsGTFSource() || emitted[a.Source] {
+			continue // GTF handled below; other sources emitted once, at first appearance
 		}
-		if src.IsGTFSource() {
-			if _, seen := gtfGroups[a.Source]; !seen {
-				gtfOrder = append(gtfOrder, a.Source)
-			}
-			gtfGroups[a.Source] = append(gtfGroups[a.Source], a)
-			continue
-		}
-		ann, err := AnnotatorFor(*src, a, resolve(*src))
+		emitted[a.Source] = true
+		anns, err := SourceAnnotators(cfg, *src, srcGroups[a.Source], resolve(*src))
 		if err != nil {
 			return nil, err
 		}
-		p.Add(ann)
+		for _, ann := range anns {
+			p.Add(ann)
+		}
 	}
 
 	for _, name := range gtfOrder {
 		src := snap.SourceByName(name)
-		ann, err := buildGTF(cfg, *src, gtfGroups[name], resolve(*src))
+		anns, err := SourceAnnotators(cfg, *src, gtfGroups[name], resolve(*src))
 		if err != nil {
 			return nil, err
 		}
-		p.Add(ann)
+		for _, ann := range anns {
+			p.Add(ann)
+		}
 	}
 	return p, nil
 }
@@ -290,6 +313,17 @@ func SourceAnnotators(cfg *config.Config, src config.Source, anns []config.Annot
 		}
 		return []htsann.Annotator{ann}, nil
 	}
+	// Tabix-backed sources (vcf/tab/bed) collapse all their annotations into one
+	// grouped annotator: a single reader and a single query per record for the whole
+	// source, instead of one reader/query per annotation.
+	if isGroupable(src) {
+		ann, err := buildSourceGroup(src, anns, files)
+		if err != nil {
+			return nil, err
+		}
+		return []htsann.Annotator{ann}, nil
+	}
+	// bigwig/bigbed (incl. per-alt sets): one annotator per annotation.
 	out := make([]htsann.Annotator, 0, len(anns))
 	for _, a := range anns {
 		ann, err := AnnotatorFor(src, a, files)
@@ -302,6 +336,89 @@ func SourceAnnotators(cfg *config.Config, src config.Source, anns []config.Annot
 		out = append(out, ann)
 	}
 	return out, nil
+}
+
+// isGroupable reports whether a source's annotations can share one grouped
+// annotator (one reader, one query per record): the tabix-backed formats, excluding
+// per-alt file sets (bigWig a/c/g/t), which route by alt allele instead.
+func isGroupable(src config.Source) bool {
+	if src.IsPerAlt() {
+		return false
+	}
+	switch src.Format {
+	case "vcf", "", "bed", "tab":
+		return true
+	}
+	return false
+}
+
+// buildSourceGroup builds a single grouped annotator for a tabix-backed source over
+// its resolved file(s); a multi-file source is wrapped in multiFile (one grouped
+// annotator per file), mirroring AnnotatorFor's multi-file handling.
+func buildSourceGroup(src config.Source, anns []config.Annotation, files []config.SourceFile) (htsann.Annotator, error) {
+	if len(files) == 1 {
+		return buildGroupedSingle(src, anns, files[0].Path)
+	}
+	m := &multiFile{anns: make([]htsann.Annotator, 0, len(files))}
+	for _, f := range files {
+		ann, err := buildGroupedSingle(src, anns, f.Path)
+		if err != nil {
+			m.Close()
+			return nil, err
+		}
+		m.anns = append(m.anns, ann)
+	}
+	return m, nil
+}
+
+// buildGroupedSingle maps a source's annotations onto one hts grouped annotator for a
+// single file. The per-field mapping matches buildSingle; only the shape differs (N
+// fields on one reader instead of one annotator per field).
+func buildGroupedSingle(src config.Source, anns []config.Annotation, path string) (htsann.Annotator, error) {
+	switch src.Format {
+	case "vcf", "":
+		fields := make([]htsann.VcfFieldOptions, 0, len(anns))
+		for _, a := range anns {
+			field := a.FieldName() // INFO id, or "@ID" to copy the source ID
+			if a.IsFlag() {
+				field = "" // presence flag
+			}
+			fields = append(fields, htsann.VcfFieldOptions{
+				Name:   a.Name,
+				Field:  field,
+				Exact:  a.Match != "position", // default exact; "position" = position-only
+				Unique: a.Unique,
+			})
+		}
+		return htsann.NewVcfAnnotationGroup(htsann.VcfGroupOptions{
+			Filename: path, AutoConvert: true, Fields: fields,
+		})
+	case "bed":
+		fields := make([]htsann.TabixFieldOptions, 0, len(anns))
+		for _, a := range anns {
+			col, colName := bedColumn(a.FieldName())
+			fields = append(fields, htsann.TabixFieldOptions{
+				Name: a.Name, Col: col, ColName: colName, IsNumber: a.IsNumeric(),
+			})
+		}
+		return htsann.NewTabixAnnotationGroup(htsann.TabixGroupOptions{
+			Filename: path, AutoConvert: true, Fields: fields,
+		})
+	case "tab":
+		fields := make([]htsann.TabixFieldOptions, 0, len(anns))
+		for _, a := range anns {
+			col, colName := tabColumn(a.FieldName())
+			fields = append(fields, htsann.TabixFieldOptions{
+				Name: a.Name, Col: col, ColName: colName, IsNumber: a.IsNumeric(),
+			})
+		}
+		return htsann.NewTabixAnnotationGroup(htsann.TabixGroupOptions{
+			Filename: path, AutoConvert: true,
+			AltCol: src.AltCol, RefCol: src.RefCol, Fields: fields,
+		})
+	default:
+		return nil, fmt.Errorf("source %q: cannot group format %q", src.ID(), src.Format)
+	}
 }
 
 // multiFile runs every file's annotator for a multi-file source. The shared INFO
@@ -444,6 +561,20 @@ func setTabColumn(o *htsann.TabixOptions, field string) {
 	} else {
 		o.ColName = field
 	}
+}
+
+// bedColumn / tabColumn resolve a field to a (col, colName) pair for a grouped
+// annotator, reusing the single-annotator column logic (setBedColumn/setTabColumn).
+func bedColumn(field string) (int, string) {
+	var o htsann.TabixOptions
+	setBedColumn(&o, field)
+	return o.Col, o.ColName
+}
+
+func tabColumn(field string) (int, string) {
+	var o htsann.TabixOptions
+	setTabColumn(&o, field)
+	return o.Col, o.ColName
 }
 
 // builtinAnnotator builds the hts annotator for a builtin-sourced annotation
