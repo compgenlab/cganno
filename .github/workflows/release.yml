@@ -1,0 +1,40 @@
+name: release
+
+# Build the cross-platform release tarballs and publish a GitHub Release
+# whenever a version tag (v*) is pushed. Reuses the repo's `make cross`, so the
+# release matrix and version stamping stay defined in one place (the Makefile).
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write # create the GitHub Release and upload assets
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history + tags so `git describe --tags` stamps the version
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+
+      - name: Build release tarballs
+        run: make cross # dist/cganno-<version>-<os>-<arch>.tar.gz for linux,darwin x amd64,arm64
+
+      - name: Checksums
+        run: cd dist && sha256sum *.tar.gz > cganno-${{ github.ref_name }}-checksums.txt
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          gh release create "${{ github.ref_name }}"
+          dist/*.tar.gz dist/*-checksums.txt
+          --title "${{ github.ref_name }}"
+          --generate-notes
+          --verify-tag
