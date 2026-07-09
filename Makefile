@@ -14,7 +14,7 @@ GO      := GOWORK=off CGO_ENABLED=0 go
 PLATFORMS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64
 
 .DEFAULT_GOAL := build
-.PHONY: build test vet fmt tidy clean install cross dist dist-windows help $(PLATFORMS)
+.PHONY: build test vet fmt tidy clean install cross cross-bin dist dist-windows help $(PLATFORMS)
 
 ## build: compile for the host platform into bin/
 build:
@@ -43,6 +43,19 @@ install:
 ## cross: build release tarballs for linux,darwin x amd64,arm64
 cross: $(PLATFORMS)
 dist: cross
+
+## cross-bin: build raw release binaries (no archive) for linux,darwin x amd64,arm64
+# Emits dist/cganno-<version>-<os>-<arch> (the bare executable) — used by the
+# release workflow, which attaches the raw binaries to the GitHub Release.
+cross-bin:
+	@mkdir -p dist; \
+	for p in $(PLATFORMS); do \
+		os=$${p%/*}; arch=$${p#*/}; \
+		name=$(BIN)-$(VERSION)-$$os-$$arch; \
+		echo "building $$name"; \
+		GOWORK=off CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch \
+			go build -ldflags '$(LDFLAGS)' -o dist/$$name $(PKG); \
+	done
 
 # One target per platform: build a static binary and tar it.
 $(PLATFORMS):
