@@ -6,9 +6,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/compgenlab/hts/bed"
-	"github.com/compgenlab/hts/gtf"
-	"github.com/compgenlab/hts/vcf"
+	"github.com/compgenlab/cghts/bed"
+	"github.com/compgenlab/cghts/gtf"
+	"github.com/compgenlab/cghts/vcf"
 
 	"github.com/compgenlab/cganno/internal/config"
 	"github.com/compgenlab/cganno/internal/fetch"

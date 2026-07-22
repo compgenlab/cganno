@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/compgenlab/hts/htsio/tabix"
+	"github.com/compgenlab/cghts/htsio/tabix"
 
 	"github.com/compgenlab/cganno/internal/config"
 )

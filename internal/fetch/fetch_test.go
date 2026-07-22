@@ -12,7 +12,7 @@ import (
 	"testing"
 
 	"github.com/compgenlab/cganno/internal/bbitest"
-	"github.com/compgenlab/hts/htsio/tabix"
+	"github.com/compgenlab/cghts/htsio/tabix"
 
 	"github.com/compgenlab/cganno/internal/config"
 )

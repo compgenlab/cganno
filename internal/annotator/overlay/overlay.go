@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/compgenlab/hts/vcf"
+	"github.com/compgenlab/cghts/vcf"
 
 	"github.com/compgenlab/cganno/internal/annotate"
 	"github.com/compgenlab/cganno/internal/config"

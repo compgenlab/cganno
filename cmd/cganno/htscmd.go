@@ -7,8 +7,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/compgenlab/hts/htsio/bgzf"
-	"github.com/compgenlab/hts/htsio/tabix"
+	"github.com/compgenlab/cghts/htsio/bgzf"
+	"github.com/compgenlab/cghts/htsio/tabix"
 )
 
 // cmdBgzip and cmdTabix are hidden subcommands that mimic the `bgzip` and `tabix`

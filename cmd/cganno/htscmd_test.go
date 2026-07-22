@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/compgenlab/hts/htsio/tabix"
+	"github.com/compgenlab/cghts/htsio/tabix"
 )
 
 const tabixVCF = "##fileformat=VCFv4.2\n" +

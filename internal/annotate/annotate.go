@@ -14,8 +14,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/compgenlab/hts/vcf"
-	htsann "github.com/compgenlab/hts/vcf/annotate"
+	"github.com/compgenlab/cghts/vcf"
+	htsann "github.com/compgenlab/cghts/vcf/annotate"
 
 	"github.com/compgenlab/cganno/internal/config"
 	"github.com/compgenlab/cganno/internal/model"

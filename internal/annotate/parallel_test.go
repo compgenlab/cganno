@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/compgenlab/hts/htsio/tabix"
-	"github.com/compgenlab/hts/vcf"
+	"github.com/compgenlab/cghts/htsio/tabix"
+	"github.com/compgenlab/cghts/vcf"
 
 	"github.com/compgenlab/cganno/internal/config"
 )

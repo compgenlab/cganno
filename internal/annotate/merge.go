@@ -5,7 +5,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/compgenlab/hts/vcf"
+	"github.com/compgenlab/cghts/vcf"
 )
 
 // MergeVCFParts combines same-order VCF parts positionally into outPath. Every part

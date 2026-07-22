@@ -19,7 +19,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/compgenlab/hts/htsio/tabix"
+	"github.com/compgenlab/cghts/htsio/tabix"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/compgenlab/cganno/internal/checksum"

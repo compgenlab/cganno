@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/compgenlab/hts/vcf"
+	"github.com/compgenlab/cghts/vcf"
 )
 
 // writePartVCF writes a small uncompressed part VCF (header lines + record lines).
