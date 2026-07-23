@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/BurntSushi/toml"
 
@@ -64,7 +65,7 @@ type Config struct {
 	// assembly in `References`, so a snapshot's reference is looked up from its
 	// assembly (see ReferenceFor) rather than being pinned in the manifest.
 	DataDir         string               `toml:"data_dir"`
-	CacheDir        string               `toml:"cache_dir"` // downloaded source files, cached by name/version
+	CacheDir        string               `toml:"cache_dir"`          // downloaded source files, cached by name/version
 	TempDir         string               `toml:"temp_dir,omitempty"` // base for scratch dirs (tool workdirs, fan-out parts); default: $TMPDIR or /tmp
 	DefaultSnapshot string               `toml:"default_snapshot"`
 	AnnotationsDir  string               `toml:"annotations_dir"`      // root holding sources/ tools/ snapshots/ (default "annotations")
@@ -114,6 +115,56 @@ type ServerConfig struct {
 	MasterKey string `toml:"master_key,omitempty"` // HMAC signing key for API tokens
 	Workers   int    `toml:"workers,omitempty"`    // async worker pool size (default 1)
 	DB        string `toml:"db,omitempty"`         // job-queue SQLite path (default "cganno_server.db")
+
+	// Large-job performance.
+	MaxChunkVariants *int `toml:"max_chunk_variants,omitempty"` // variant-count chunk size for a job (default 2000; explicit 0 disables chunking)
+	AnnotateThreads  int  `toml:"annotate_threads,omitempty"`   // per-job chunk parallelism (default 0 = GOMAXPROCS)
+
+	// Retention.
+	JobTTL string `toml:"job_ttl,omitempty"` // GC age for terminal jobs, a Go duration (default "168h"; empty/"0" = keep forever)
+
+	// Public-service abuse protection.
+	MaxJobsPerIP     int      `toml:"max_jobs_per_ip,omitempty"`    // per-IP concurrent running-job cap (default 2; <=0 = unlimited)
+	RatePerMin       int      `toml:"rate_per_min,omitempty"`       // per-IP submit throttle, requests/min (default 30; <=0 = unlimited)
+	RateBurst        int      `toml:"rate_burst,omitempty"`         // per-IP throttle burst (default 10)
+	TrustedProxies   []string `toml:"trusted_proxies,omitempty"`    // CIDRs whose X-Forwarded-For is trusted (default loopback + private)
+	AllowToolsUnauth *bool    `toml:"allow_tools_unauth,omitempty"` // whether unauthenticated /ui may trigger type="tool" sources (default false)
+
+	// Browser UI.
+	UIEnabled      *bool `toml:"ui_enabled,omitempty"`       // serve the browser form + /ui/* twins (default true)
+	UIRequireToken bool  `toml:"ui_require_token,omitempty"` // require the bearer token on /ui/* too (default false)
+}
+
+// JobTTLDuration parses JobTTL into a retention duration. An empty string defaults
+// to 7 days; "0" (or any zero duration) disables GC. Unparseable values fall back
+// to the 7-day default.
+func (s ServerConfig) JobTTLDuration() time.Duration {
+	if s.JobTTL == "" {
+		return 168 * time.Hour
+	}
+	d, err := time.ParseDuration(s.JobTTL)
+	if err != nil {
+		return 168 * time.Hour
+	}
+	return d // may be 0 → GC disabled
+}
+
+// ChunkSize is the effective variant-count chunk size: nil ⇒ 2000 (chunking on),
+// an explicit 0 ⇒ chunking disabled, else the configured value.
+func (s ServerConfig) ChunkSize() int {
+	if s.MaxChunkVariants == nil {
+		return 2000
+	}
+	return *s.MaxChunkVariants
+}
+
+// UIIsEnabled reports whether the browser UI is served (nil UIEnabled ⇒ true).
+func (s ServerConfig) UIIsEnabled() bool { return s.UIEnabled == nil || *s.UIEnabled }
+
+// ToolsAllowedUnauth reports whether unauthenticated /ui requests may trigger tool
+// sources (nil ⇒ false, the safe default for a public server).
+func (s ServerConfig) ToolsAllowedUnauth() bool {
+	return s.AllowToolsUnauth != nil && *s.AllowToolsUnauth
 }
 
 // Reference pins the reference genome FASTA for one assembly (used by external
@@ -763,6 +814,21 @@ func Load(path string) (*Config, error) {
 	}
 	if c.Server.DB == "" {
 		c.Server.DB = "cganno_server.db"
+	}
+	if c.Server.MaxJobsPerIP == 0 {
+		c.Server.MaxJobsPerIP = 2
+	}
+	if c.Server.RatePerMin == 0 {
+		c.Server.RatePerMin = 30
+	}
+	if c.Server.RateBurst == 0 {
+		c.Server.RateBurst = 10
+	}
+	if len(c.Server.TrustedProxies) == 0 {
+		// Behind Caddy/Traefik on loopback by default; private ranges cover
+		// container/sidecar proxies. Override to lock down which peer's
+		// X-Forwarded-For is trusted.
+		c.Server.TrustedProxies = []string{"127.0.0.0/8", "::1/128", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"}
 	}
 	if err := c.validate(); err != nil {
 		return nil, err

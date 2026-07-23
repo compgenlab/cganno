@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/compgenlab/cganno/internal/config"
@@ -181,6 +182,9 @@ func (s *Server) handleAnnotateLocus(w http.ResponseWriter, r *http.Request) {
 	if !s.validate(w, req.Locus, selection) {
 		return
 	}
+	if !s.toolGateOK(w, r, selection) {
+		return
+	}
 	s.enqueue(w, r, KindLocus, selection, []byte(req.Locus))
 }
 
@@ -222,7 +226,39 @@ func (s *Server) handleAnnotateVCF(w http.ResponseWriter, r *http.Request) {
 	if !s.validateSelection(w, selection) {
 		return
 	}
+	if !s.toolGateOK(w, r, selection) {
+		return
+	}
 	s.enqueue(w, r, KindVCF, selection, body)
+}
+
+// authed reports whether the request carries a valid bearer token (used to relax
+// the unauthenticated tool-source gate for /ui callers that do present a token).
+func (s *Server) authed(r *http.Request) bool {
+	tok, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+	return ok && VerifyToken(s.cfg.Server.MasterKey, strings.TrimSpace(tok))
+}
+
+// toolGateOK blocks unauthenticated requests from triggering expensive type="tool"
+// sources (VEP/ANNOVAR — the main compute-amplification vector) unless the server
+// opts in via allow_tools_unauth. Authenticated requests are always allowed. On a
+// block it writes a 403 and returns false.
+func (s *Server) toolGateOK(w http.ResponseWriter, r *http.Request, selection string) bool {
+	if s.cfg.Server.ToolsAllowedUnauth() || s.authed(r) {
+		return true
+	}
+	anns, err := resolveSelection(s.snap, selection)
+	if err != nil {
+		return true // selection already validated upstream; don't double-report
+	}
+	for _, a := range anns {
+		if src := s.snap.SourceByName(a.Source); src != nil && src.IsTool() {
+			writeJSONError(w, http.StatusForbidden,
+				"tool-based annotations require an API token on this server")
+			return false
+		}
+	}
+	return true
 }
 
 // snapshotOK enforces that a request's optional snapshot matches the one the
@@ -254,14 +290,71 @@ func (s *Server) validateSelection(w http.ResponseWriter, selection string) bool
 	return true
 }
 
-// enqueue records a job and writes the 202 { job_id } response.
+// enqueue records a job (tagged with the trusted-proxy-resolved client IP for fair
+// scheduling) and writes the 202 { job_id } response.
 func (s *Server) enqueue(w http.ResponseWriter, r *http.Request, kind, selection string, body []byte) {
-	id, err := s.queue.Enqueue(r.Context(), kind, s.snap.Name, selection, body)
+	ip := clientIP(r, s.trusted)
+	id, err := s.queue.Enqueue(r.Context(), kind, s.snap.Name, selection, ip, body)
 	if err != nil {
 		writeJSONError(w, http.StatusInternalServerError, "enqueue: "+err.Error())
 		return
 	}
 	writeJSON(w, http.StatusAccepted, map[string]string{"job_id": id})
+}
+
+// --- ops endpoints ---------------------------------------------------------
+
+// handleHealthz is an unauthenticated liveness/readiness probe (for the reverse
+// proxy). It reports the snapshot the server is serving.
+func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]string{
+		"status":   "ok",
+		"snapshot": s.snap.Name,
+		"assembly": s.snap.Assembly,
+	})
+}
+
+// handleVersion reports the cganno build version.
+func (s *Server) handleVersion(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]string{"version": s.version})
+}
+
+// handleListJobs lists jobs (newest first) with optional ?status= and ?limit/?offset
+// paging. It serves both /v1/jobs (authenticated) and /ui/jobs.
+func (s *Server) handleListJobs(w http.ResponseWriter, r *http.Request) {
+	status := strings.TrimSpace(r.URL.Query().Get("status"))
+	switch status {
+	case "", StatusQueued, StatusRunning, StatusDone, StatusError:
+	default:
+		writeJSONError(w, http.StatusBadRequest, "invalid status filter")
+		return
+	}
+	limit := atoiDefault(r.URL.Query().Get("limit"), 50)
+	if limit > 500 {
+		limit = 500
+	}
+	offset := atoiDefault(r.URL.Query().Get("offset"), 0)
+	jobs, err := s.queue.List(r.Context(), status, limit, offset)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if jobs == nil {
+		jobs = []Job{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"jobs": jobs, "limit": limit, "offset": offset})
+}
+
+// atoiDefault parses s as an int, falling back to def on empty/invalid input.
+func atoiDefault(s string, def int) int {
+	if s == "" {
+		return def
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil || n < 0 {
+		return def
+	}
+	return n
 }
 
 // --- job status + results --------------------------------------------------

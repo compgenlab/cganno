@@ -68,6 +68,6 @@ func cmdServer(ctx context.Context, cfgPath, snapshot string, args []string) err
 	runCtx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	srv := server.New(cfg, snap, st, q)
+	srv := server.New(cfg, snap, st, q, version)
 	return srv.Run(runCtx)
 }
