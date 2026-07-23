@@ -56,6 +56,41 @@ func TestSourceAnnotatorsGTF(t *testing.T) {
 	}
 }
 
+// refseqBiotypeFixture mirrors a coordinate-sorted RefSeq GTF for one gene: the
+// gene_biotype lives only on the "gene" feature line, and a transcript row for the
+// same gene_id sorts ahead of it (as CECR2 does after cgkit tab-sort). The gene
+// must still resolve BIOTYPE=protein_coding rather than the empty biotype of the
+// row that happened to seed it first. Regression for cghts v0.6.3.
+const refseqBiotypeFixture = `chr1	BestRefSeq	transcript	101	800	.	+	.	gene_id "GeneR"; transcript_id "NM_1"; gene "GeneR"; transcript_biotype "mRNA";
+chr1	BestRefSeq	exon	101	200	.	+	.	gene_id "GeneR"; transcript_id "NM_1"; gene "GeneR"; transcript_biotype "mRNA";
+chr1	BestRefSeq	CDS	101	200	.	+	0	gene_id "GeneR"; transcript_id "NM_1"; gene "GeneR"; transcript_biotype "mRNA";
+chr1	BestRefSeq,Gnomon	gene	101	800	.	+	.	gene_id "GeneR"; gene "GeneR"; gene_biotype "protein_coding";
+`
+
+func TestSourceAnnotatorsGTFRefSeqBiotype(t *testing.T) {
+	dir := t.TempDir()
+	gtfPath := filepath.Join(dir, "refseq.gtf")
+	if err := os.WriteFile(gtfPath, []byte(refseqBiotypeFixture), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg := &config.Config{CacheDir: t.TempDir()}
+	src := config.Source{Name: "refseq", Version: "2024_08", Format: "gtf", LocalPath: gtfPath}
+	anns := []config.Annotation{{Name: "biotype", Source: "refseq", Field: "BIOTYPE", Type: "categorical"}}
+	got, err := SourceAnnotators(cfg, src, anns, []config.SourceFile{{Path: gtfPath}})
+	if err != nil {
+		t.Fatalf("SourceAnnotators: %v", err)
+	}
+	defer got[0].Close()
+
+	rec := vcf.NewRecord("chr1", 150, "A", []string{"G"}) // inside GeneR
+	if err := got[0].Annotate(rec); err != nil {
+		t.Fatal(err)
+	}
+	if v, ok := rec.InfoValue("biotype"); !ok || v.String() != "protein_coding" {
+		t.Errorf("biotype = %q (ok=%v), want protein_coding", v.String(), ok)
+	}
+}
+
 func TestBuildPipelineGTF(t *testing.T) {
 	dir := t.TempDir()
 	gtfPath := filepath.Join(dir, "genes.gtf")
