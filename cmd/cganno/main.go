@@ -168,6 +168,7 @@ config commands:
 annotation commands:
   annotate [--all|-a name,...] [--format tab|vcf|json|text] [-o FILE] [-v] <vcf|locus...>
                                annotate loci (default format: tab; -o writes to a file; -v prints progress)
+                               --no-cache ignores the cache DB entirely (compute fresh, persist nothing)
                                vcf output: --tool-cache-dir DIR caches/reuses tool output by input
                                --temp-dir DIR puts scratch files there (default: config temp_dir, else $TMPDIR)
   server [-addr IP:port]       run the async REST annotate server (needs a [server] config block)
@@ -243,6 +244,7 @@ func cmdAnnotate(ctx context.Context, cfgPath, snapshot string, args []string) e
 	keepTemp := fs.Bool("keep-temp", false, "vcf output: keep the per-source temp part files (for debugging the fan-out)")
 	toolCacheDir := fs.String("tool-cache-dir", "", "vcf output: directory used as a per-input tool-output cache — reuse a saved output matching this input+tool+assembly (skip the tool), else run it and save the output there")
 	tempDir := fs.String("temp-dir", "", "base directory for scratch files (tool workdirs, fan-out parts); default: config temp_dir, else $TMPDIR or /tmp")
+	noCache := fs.Bool("no-cache", false, "ignore the annotation cache DB entirely: compute every locus fresh and persist nothing")
 	verbose := fs.Bool("verbose", false, "print progress to stderr (phases, tool cache hits, variant counts)")
 	fs.BoolVar(verbose, "v", false, "shorthand for --verbose")
 	var keys stringList
@@ -323,9 +325,14 @@ func cmdAnnotate(ctx context.Context, cfgPath, snapshot string, args []string) e
 	}
 	lg.Logf("annotating %s loci (%d annotation(s) selected)", annotatepkg.Count(len(loci)), len(selected))
 
-	st, err := openStore(cfg)
-	if err != nil {
-		return err
+	// --no-cache bypasses the cache DB: a nil store makes the engine (and the
+	// per-locus tool cache) compute every locus fresh and persist nothing.
+	var st store.Store
+	if !*noCache {
+		st, err = openStore(cfg)
+		if err != nil {
+			return err
+		}
 	}
 	defer func() {
 		if st != nil {
@@ -335,7 +342,9 @@ func cmdAnnotate(ctx context.Context, cfgPath, snapshot string, args []string) e
 
 	// Annotate over the shared locus path (verifies sources, runs any referenced
 	// tool sources, builds the engine, and annotates) — the same path the server uses.
-	res, err := service.AnnotateLoci(ctx, cfg, snap, st, selected, loci, inputIsVCF)
+	// --no-cache leaves st nil, so referenced tools must run directly over all loci
+	// (the skip-tool-cache path) rather than through the per-locus cache.
+	res, err := service.AnnotateLoci(ctx, cfg, snap, st, selected, loci, inputIsVCF || *noCache)
 	if err != nil {
 		return err
 	}
