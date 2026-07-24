@@ -200,12 +200,15 @@ async function poll(jobId) {
 }
 
 // Submit the current mode's input, returning the parsed response (or throwing).
+// ?wait= asks the server to hold the response briefly so fast jobs come back
+// already done, letting us skip polling and jump straight to results.
+const WAIT = 10;
 async function submitJob() {
   const anns = selectedAnnotations();
   const mode = currentMode();
   if (mode === 'single') {
     const body = { locus: $('locus').value.trim(), annotations: anns };
-    const r = await fetch('/ui/submit', {
+    const r = await fetch('/ui/submit?wait=' + WAIT, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
     });
     return { r, data: await r.json() };
@@ -221,7 +224,7 @@ async function submitJob() {
     if (!f) throw new Error('choose a VCF file');
     fd.append('vcf', f, f.name);
   }
-  const r = await fetch('/ui/submit/vcf', { method: 'POST', body: fd });
+  const r = await fetch('/ui/submit/vcf?wait=' + WAIT, { method: 'POST', body: fd });
   return { r, data: await r.json() };
 }
 
@@ -278,6 +281,17 @@ $('form').addEventListener('submit', async (e) => {
       $('status').innerHTML = '<span class="err">' + (data.error || 'submit failed') + '</span>';
       return;
     }
+    // Fast path: the job finished within the server's wait buffer — render now.
+    if (data.status === 'done' && data.results) {
+      $('status').textContent = 'Done (' + (data.n_variants || data.results.length) + ' variant(s)).';
+      renderTable(data.results);
+      return;
+    }
+    if (data.status === 'error') {
+      $('status').innerHTML = '<span class="err">Job failed: ' + (data.error || 'unknown error') + '</span>';
+      return;
+    }
+    // Slow path: still running after the buffer — fall back to polling.
     poll(data.job_id);
   } catch (err) {
     $('status').innerHTML = '<span class="err">' + err.message + '</span>';

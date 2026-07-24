@@ -6,7 +6,61 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"testing"
+	"time"
 )
+
+func TestWaitForReturnsOnDone(t *testing.T) {
+	q := openTestQueue(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	q.StartWorkers(ctx, 1, func(_ context.Context, _ Job, _ []byte) ([]byte, int, error) {
+		return []byte("[]"), 1, nil
+	})
+	id, _ := q.Enqueue(ctx, KindLocus, "s", "", "ip", []byte("x"))
+	job, ok, err := q.WaitFor(ctx, id, 2*time.Second)
+	if err != nil || !ok {
+		t.Fatalf("WaitFor ok=%v err=%v", ok, err)
+	}
+	if job.Status != StatusDone {
+		t.Errorf("status = %q, want done", job.Status)
+	}
+}
+
+func TestWaitForTimeoutReturnsCurrent(t *testing.T) {
+	q := openTestQueue(t) // no workers → job stays queued
+	id, _ := q.Enqueue(context.Background(), KindLocus, "s", "", "ip", []byte("x"))
+	start := time.Now()
+	job, ok, err := q.WaitFor(context.Background(), id, 200*time.Millisecond)
+	if err != nil || !ok {
+		t.Fatalf("WaitFor ok=%v err=%v", ok, err)
+	}
+	if job.Status != StatusQueued {
+		t.Errorf("status = %q, want queued (timed out)", job.Status)
+	}
+	if elapsed := time.Since(start); elapsed < 150*time.Millisecond {
+		t.Errorf("returned too early (%s) — should have waited ~200ms", elapsed)
+	}
+}
+
+func TestParseWaitCaps(t *testing.T) {
+	s := testServer(t) // submit_wait unset → 10s cap
+	mk := func(v string) *http.Request { return httptest.NewRequest("POST", "/ui/submit?wait="+v, nil) }
+	cases := map[string]time.Duration{
+		"5":   5 * time.Second,
+		"3s":  3 * time.Second,
+		"100": 10 * time.Second, // capped
+		"":    0,
+		"-4":  0,
+	}
+	for in, want := range cases {
+		if got := s.parseWait(mk(in)); got != want {
+			t.Errorf("parseWait(wait=%q) = %s, want %s", in, got, want)
+		}
+	}
+	if got := s.parseWait(httptest.NewRequest("POST", "/ui/submit", nil)); got != 0 {
+		t.Errorf("parseWait(no wait) = %s, want 0", got)
+	}
+}
 
 func TestClientIPTrustedProxy(t *testing.T) {
 	trusted := parseCIDRs([]string{"10.0.0.0/8"})

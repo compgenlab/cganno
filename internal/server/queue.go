@@ -195,6 +195,38 @@ func (q *Queue) Get(ctx context.Context, id string) (Job, bool, error) {
 	return j, true, nil
 }
 
+// WaitFor blocks until job id reaches a terminal status (done/error), the timeout
+// elapses, or ctx is cancelled — returning the latest job seen. ok=false only when
+// the id is unknown. It polls the job row (the annotation runs in the worker pool,
+// so this holds only an HTTP goroutine, not a worker). A timeout <= 0 returns the
+// current job immediately without waiting.
+func (q *Queue) WaitFor(ctx context.Context, id string, timeout time.Duration) (Job, bool, error) {
+	job, ok, err := q.Get(ctx, id)
+	if err != nil || !ok || timeout <= 0 {
+		return job, ok, err
+	}
+	if job.Status == StatusDone || job.Status == StatusError {
+		return job, true, nil
+	}
+	deadline := time.Now().Add(timeout)
+	ticker := time.NewTicker(150 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return job, true, ctx.Err()
+		case <-ticker.C:
+			job, ok, err = q.Get(ctx, id)
+			if err != nil || !ok {
+				return job, ok, err
+			}
+			if job.Status == StatusDone || job.Status == StatusError || !time.Now().Before(deadline) {
+				return job, true, nil
+			}
+		}
+	}
+}
+
 // Result returns a done job's result JSON (ok=false when the id is unknown or the
 // job has no stored result yet).
 func (q *Queue) Result(ctx context.Context, id string) ([]byte, bool, error) {

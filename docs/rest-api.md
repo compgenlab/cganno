@@ -7,6 +7,12 @@ expensive (external tools, large lookups), so requests are **queued** — a subm
 id and fetches JSON results when the job is done. Jobs and results persist in a dedicated
 SQLite database.
 
+Every request (fast or slow) goes through the queue, but a submit may include **`?wait=<seconds>`**
+(capped by `submit_wait`, default 10s) to block briefly for the job to finish and return the
+**results inline** — so quick lookups come back done in a single round trip, while slow jobs fall
+back to polling. The same `?wait=` works on `GET …/jobs/{id}/results` for a poller that would
+rather block than spin. The browser form uses this so simple variants render immediately.
+
 ## Configuration
 
 Add a `[server]` block to `config.toml` (see [`config.example.toml`](../config.example.toml)):
@@ -22,6 +28,7 @@ db         = "$CGANNO_HOME/cganno_server.db"   # job-queue + results DB (default
 # Large-job performance (VCF uploads)
 max_chunk_variants = 2000                      # split a job into ≤N-variant chunks annotated in parallel (0 = off)
 annotate_threads   = 0                         # per-job chunk parallelism (0 = all cores)
+submit_wait        = "10s"                     # a submit (or results ?wait=) blocks up to this for the job; fast jobs return inline ("0" = always async)
 
 # Retention
 job_ttl = "24h"                                # GC terminal jobs + results older than this ("" = 24h default; "0" = keep forever)
@@ -84,8 +91,8 @@ should be authenticated.
 | method + path | body | response |
 | --- | --- | --- |
 | `GET /v1/annotations` | — | the snapshot's sources + annotation fields, with the default set marked (for discovery/selection) |
-| `POST /v1/annotate` | `{ "locus": "chrom:pos:ref:alt", "annotations": "all"｜["a",…] }` | `202 { "job_id": "…" }` |
-| `POST /v1/annotate/vcf` | `multipart/form-data`: file field `vcf`, optional `annotations` form field | `202 { "job_id": "…" }` |
+| `POST /v1/annotate` | `{ "locus": "chrom:pos:ref:alt", "annotations": "all"｜["a",…] }`; optional `?wait=<sec>` | `202 { "job_id" }`, or `200 { "job_id", "status":"done", "n_variants", "results":[…] }` if it finishes within `wait` |
+| `POST /v1/annotate/vcf` | `multipart/form-data`: file field `vcf`, optional `annotations` form field; optional `?wait=<sec>` | `202 { "job_id" }` (or inline results, as above) |
 | `GET /v1/jobs` | `?status=&limit=&offset=` (all optional) | `{ "jobs": [ … ], "limit": N, "offset": M }`, newest first |
 | `GET /v1/jobs/{id}` | — | job status object |
 | `GET /v1/jobs/{id}/results` | — | the results array (see below), or `409` if not finished |
@@ -165,9 +172,14 @@ curl -s -H "Authorization: Bearer $TOKEN" $BASE/v1/annotations
 
 # submit a locus, get a job id, poll, fetch results
 JID=$(curl -s -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-      -d '{"locus":"chr1:115256529:T:C"}' $BASE/v1/annotate | jq -r .job_id)
+      -d '{"locus":"chr1:115256529:T:C","annotations":"all"}' $BASE/v1/annotate | jq -r .job_id)
 curl -s -H "Authorization: Bearer $TOKEN" $BASE/v1/jobs/$JID            # {"status":"done",…}
 curl -s -H "Authorization: Bearer $TOKEN" $BASE/v1/jobs/$JID/results    # [ {…} ]
+
+# …or wait for a fast job and get results in one call (falls back to a job id if slow)
+curl -s -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+     -d '{"locus":"chr1:115256529:T:C","annotations":"all"}' "$BASE/v1/annotate?wait=10"
+# → {"job_id":"…","status":"done","n_variants":1,"results":[ {…} ]}
 
 # annotate a whole VCF (all annotations)
 curl -s -H "Authorization: Bearer $TOKEN" \

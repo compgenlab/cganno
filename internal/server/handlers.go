@@ -1,11 +1,13 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/compgenlab/cganno/internal/config"
 	"github.com/compgenlab/cganno/internal/vcf"
@@ -291,7 +293,9 @@ func (s *Server) validateSelection(w http.ResponseWriter, selection string) bool
 }
 
 // enqueue records a job (tagged with the trusted-proxy-resolved client IP for fair
-// scheduling) and writes the 202 { job_id } response.
+// scheduling). With a ?wait= (capped by submit_wait), it blocks up to that long for
+// the job to finish and returns the results inline — so fast jobs come back done in
+// one round trip. Otherwise it writes the async 202 { job_id } response as before.
 func (s *Server) enqueue(w http.ResponseWriter, r *http.Request, kind, selection string, body []byte) {
 	ip := clientIP(r, s.trusted)
 	id, err := s.queue.Enqueue(r.Context(), kind, s.snap.Name, selection, ip, body)
@@ -299,7 +303,72 @@ func (s *Server) enqueue(w http.ResponseWriter, r *http.Request, kind, selection
 		writeJSONError(w, http.StatusInternalServerError, "enqueue: "+err.Error())
 		return
 	}
-	writeJSON(w, http.StatusAccepted, map[string]string{"job_id": id})
+	wait := s.parseWait(r)
+	if wait <= 0 {
+		writeJSON(w, http.StatusAccepted, map[string]string{"job_id": id})
+		return
+	}
+	job, _, err := s.queue.WaitFor(r.Context(), id, wait)
+	if err != nil {
+		// ctx cancelled (client gone) or a DB error — still hand back the id to poll.
+		writeJSON(w, http.StatusAccepted, submitResponse{JobID: id, Status: StatusQueued})
+		return
+	}
+	s.writeSubmitResult(w, r.Context(), id, job)
+}
+
+// submitResponse is the wait-aware submit/poll payload: it always carries the job
+// id and status, plus the results array (and n_variants) once the job is done, or
+// the error message if it failed.
+type submitResponse struct {
+	JobID     string          `json:"job_id"`
+	Status    string          `json:"status"`
+	NVariants int64           `json:"n_variants,omitempty"`
+	Error     string          `json:"error,omitempty"`
+	Results   json.RawMessage `json:"results,omitempty"`
+}
+
+// writeSubmitResult renders a job's current state: 200 with results when done, 200
+// with the error when failed, else 202 with the job id to keep polling.
+func (s *Server) writeSubmitResult(w http.ResponseWriter, ctx context.Context, id string, job Job) {
+	switch job.Status {
+	case StatusDone:
+		result, ok, err := s.queue.Result(ctx, id)
+		if err != nil || !ok {
+			writeJSON(w, http.StatusAccepted, submitResponse{JobID: id, Status: StatusRunning})
+			return
+		}
+		writeJSON(w, http.StatusOK, submitResponse{
+			JobID: id, Status: StatusDone, NVariants: job.NVariants, Results: json.RawMessage(result)})
+	case StatusError:
+		writeJSON(w, http.StatusOK, submitResponse{JobID: id, Status: StatusError, Error: job.Error})
+	default:
+		writeJSON(w, http.StatusAccepted, submitResponse{JobID: id, Status: job.Status})
+	}
+}
+
+// parseWait reads a bounded wait from ?wait= (plain seconds like "10" or a Go
+// duration like "10s"), capped by the server's submit_wait. 0/absent = don't wait.
+func (s *Server) parseWait(r *http.Request) time.Duration {
+	raw := strings.TrimSpace(r.URL.Query().Get("wait"))
+	if raw == "" {
+		return 0
+	}
+	var d time.Duration
+	if n, err := strconv.Atoi(raw); err == nil {
+		d = time.Duration(n) * time.Second
+	} else if pd, err := time.ParseDuration(raw); err == nil {
+		d = pd
+	} else {
+		return 0
+	}
+	if d < 0 {
+		return 0
+	}
+	if capD := s.cfg.Server.SubmitWaitCap(); d > capD {
+		d = capD
+	}
+	return d
 }
 
 // --- ops endpoints ---------------------------------------------------------
@@ -374,7 +443,9 @@ func (s *Server) handleJob(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleJobResults(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	job, ok, err := s.queue.Get(r.Context(), id)
+	// ?wait= long-polls up to the (capped) duration for the job to finish, so a
+	// poller can block rather than spin.
+	job, ok, err := s.queue.WaitFor(r.Context(), id, s.parseWait(r))
 	if err != nil {
 		writeJSONError(w, http.StatusInternalServerError, err.Error())
 		return

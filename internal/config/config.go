@@ -121,6 +121,11 @@ type ServerConfig struct {
 	MaxChunkVariants *int `toml:"max_chunk_variants,omitempty"` // variant-count chunk size for a job (default 2000; explicit 0 disables chunking)
 	AnnotateThreads  int  `toml:"annotate_threads,omitempty"`   // per-job chunk parallelism (default 0 = GOMAXPROCS)
 
+	// Interactive convenience: how long a submit (or a results ?wait=) may block
+	// server-side for the job to finish before returning the job id to poll. Lets
+	// fast jobs return results in the first response. Caps any client-requested wait.
+	SubmitWait string `toml:"submit_wait,omitempty"` // Go duration (default "10s"; "0" = never wait, always async)
+
 	// Retention.
 	JobTTL string `toml:"job_ttl,omitempty"` // GC age for terminal jobs + their results, a Go duration (default "24h"; "0" = keep forever)
 
@@ -162,6 +167,20 @@ func (s ServerConfig) ChunkSize() int {
 // RequireTokenForV1 reports whether the /v1 API is bearer-token authenticated
 // (nil RequireToken ⇒ true, the secure default). false serves /v1 open.
 func (s ServerConfig) RequireTokenForV1() bool { return s.RequireToken == nil || *s.RequireToken }
+
+// SubmitWaitCap is the maximum time a submit/results request may block waiting for
+// a job to finish. Empty ⇒ 10s; "0" ⇒ never wait (always return immediately).
+// Unparseable/negative values fall back to 10s.
+func (s ServerConfig) SubmitWaitCap() time.Duration {
+	if s.SubmitWait == "" {
+		return 10 * time.Second
+	}
+	d, err := time.ParseDuration(s.SubmitWait)
+	if err != nil || d < 0 {
+		return 10 * time.Second
+	}
+	return d // may be 0 → never wait
+}
 
 // UIIsEnabled reports whether the browser UI is served (nil UIEnabled ⇒ true).
 func (s ServerConfig) UIIsEnabled() bool { return s.UIEnabled == nil || *s.UIEnabled }

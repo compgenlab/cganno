@@ -61,6 +61,7 @@ fasta = "/data/ref/GRCh38.fa"
 # Large-job performance (VCF uploads):
 # max_chunk_variants = 2000              # split a job into ≤N-variant chunks, annotated in parallel (0 = off)
 # annotate_threads   = 0                 # per-job chunk parallelism (0 = all cores); lets one big job use many cores
+# submit_wait        = "10s"             # a submit (or results ?wait=) blocks up to this for the job to finish, returning results inline for fast jobs ("0" = always async)
 #
 # Retention:
 # job_ttl = "24h"                        # GC terminal jobs + results older than this ("" = default 24h; "0" = keep forever)
