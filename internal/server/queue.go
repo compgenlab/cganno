@@ -167,6 +167,8 @@ func (q *Queue) Enqueue(ctx context.Context, kind, snapshot, selection, clientIP
 	if err := tx.Commit(); err != nil {
 		return "", err
 	}
+	log.Printf("cganno server: job %s queued (kind=%s, ip=%s, selection=%q, %d bytes)",
+		id, kind, clientIP, selection, len(body))
 	q.poke()
 	return id, nil
 }
@@ -423,8 +425,11 @@ func (q *Queue) claimNext(ctx context.Context) (Job, []byte, bool, error) {
 
 // process runs the job's runner and records its outcome.
 func (q *Queue) process(ctx context.Context, job Job, input []byte, runner Runner) {
+	start := time.Now()
+	log.Printf("cganno server: job %s running (kind=%s, ip=%s)", job.ID, job.Kind, job.ClientIP)
 	result, nVar, err := runner(ctx, job, input)
 	if err != nil {
+		log.Printf("cganno server: job %s failed after %s: %v", job.ID, time.Since(start).Round(time.Millisecond), err)
 		if _, uerr := q.db.ExecContext(ctx,
 			`UPDATE job SET status=?, error=?, finished_at=? WHERE id=?`,
 			StatusError, err.Error(), q.nowFn(), job.ID); uerr != nil {
@@ -452,5 +457,7 @@ func (q *Queue) process(ctx context.Context, job Job, input []byte, runner Runne
 	}
 	if err := tx.Commit(); err != nil {
 		log.Printf("cganno server: commit job %s: %v", job.ID, err)
+		return
 	}
+	log.Printf("cganno server: job %s done (%d variant(s) in %s)", job.ID, nVar, time.Since(start).Round(time.Millisecond))
 }

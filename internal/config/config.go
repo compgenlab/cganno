@@ -122,7 +122,7 @@ type ServerConfig struct {
 	AnnotateThreads  int  `toml:"annotate_threads,omitempty"`   // per-job chunk parallelism (default 0 = GOMAXPROCS)
 
 	// Retention.
-	JobTTL string `toml:"job_ttl,omitempty"` // GC age for terminal jobs, a Go duration (default "168h"; empty/"0" = keep forever)
+	JobTTL string `toml:"job_ttl,omitempty"` // GC age for terminal jobs + their results, a Go duration (default "24h"; "0" = keep forever)
 
 	// Public-service abuse protection.
 	MaxJobsPerIP     int      `toml:"max_jobs_per_ip,omitempty"`    // per-IP concurrent running-job cap (default 2; <=0 = unlimited)
@@ -136,16 +136,16 @@ type ServerConfig struct {
 	UIRequireToken bool  `toml:"ui_require_token,omitempty"` // require the bearer token on /ui/* too (default false)
 }
 
-// JobTTLDuration parses JobTTL into a retention duration. An empty string defaults
-// to 7 days; "0" (or any zero duration) disables GC. Unparseable values fall back
-// to the 7-day default.
+// JobTTLDuration parses JobTTL into a retention duration for terminal jobs and
+// their results. An empty string defaults to 24 hours; "0" (or any zero duration)
+// disables GC. Unparseable values fall back to the 24-hour default.
 func (s ServerConfig) JobTTLDuration() time.Duration {
 	if s.JobTTL == "" {
-		return 168 * time.Hour
+		return 24 * time.Hour
 	}
 	d, err := time.ParseDuration(s.JobTTL)
 	if err != nil {
-		return 168 * time.Hour
+		return 24 * time.Hour
 	}
 	return d // may be 0 → GC disabled
 }

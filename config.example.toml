@@ -63,7 +63,7 @@ fasta = "/data/ref/GRCh38.fa"
 # annotate_threads   = 0                 # per-job chunk parallelism (0 = all cores); lets one big job use many cores
 #
 # Retention:
-# job_ttl = "168h"                       # GC terminal jobs older than this ("" = default 7d; "0" = keep forever)
+# job_ttl = "24h"                        # GC terminal jobs + results older than this ("" = default 24h; "0" = keep forever)
 #
 # Public-service abuse protection (this is an open async compute service):
 # max_jobs_per_ip = 2                    # per-IP concurrent running-job cap (fair queue; <=0 = unlimited)

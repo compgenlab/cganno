@@ -24,7 +24,7 @@ max_chunk_variants = 2000                      # split a job into ≤N-variant c
 annotate_threads   = 0                         # per-job chunk parallelism (0 = all cores)
 
 # Retention
-job_ttl = "168h"                               # GC terminal jobs older than this ("" = 7d default; "0" = keep forever)
+job_ttl = "24h"                                # GC terminal jobs + results older than this ("" = 24h default; "0" = keep forever)
 
 # Public-service abuse protection
 max_jobs_per_ip = 2                            # per-IP concurrent running-job cap (fair queue; <=0 = unlimited)
