@@ -14,7 +14,8 @@ Add a `[server]` block to `config.toml` (see [`config.example.toml`](../config.e
 ```toml
 [server]
 endpoint   = "127.0.0.1:8080"                 # IP:port to listen on (bind localhost behind a proxy)
-master_key = "change-me-to-a-secret"          # HMAC key signing /v1 API tokens
+master_key = "change-me-to-a-secret"          # HMAC key signing /v1 API tokens (omit if require_token=false)
+require_token = true                           # bearer-token auth on /v1 (false = open, tokenless public API)
 workers    = 2                                 # async worker pool size — jobs run at once (default 1)
 db         = "$CGANNO_HOME/cganno_server.db"   # job-queue + results DB (default ./cganno_server.db)
 
@@ -69,6 +70,12 @@ Send it as `Authorization: Bearer <token>` on every `/v1` request. A token is
 `b64url(payload).b64url(HMAC-SHA256(master_key, b64url(payload)))`; any token correctly signed
 by `master_key` is accepted (tokens do not expire in this version). The browser form and its
 `/ui/*` endpoints are **open** (no token) for local/trusted-network convenience.
+
+**Open public API** — set `require_token = false` to serve `/v1` **without** a bearer token (no
+`Authorization` header, no startup token, `master_key` optional). The per-IP throttle, fair queue,
+and tool-source gate still apply, so an open server is still protected against abuse. Use this for
+a genuinely public service (behind a reverse proxy); keep the default (`true`) anywhere the API
+should be authenticated.
 
 ## Endpoints
 

@@ -53,7 +53,8 @@ fasta = "/data/ref/GRCh38.fa"
 # stored in `db` (its own SQLite database, separate from the annotation cache).
 # [server]
 # endpoint   = "127.0.0.1:8080"          # IP:port to listen on (bind localhost behind a proxy)
-# master_key = "change-me-to-a-secret"   # HMAC key signing /v1 API tokens
+# master_key = "change-me-to-a-secret"   # HMAC key signing /v1 API tokens (omit if require_token=false)
+# require_token = true                    # bearer-token auth on /v1 (false = open, tokenless public API)
 # workers    = 2                          # async annotation worker pool size (jobs run at once)
 # db         = "$CGANNO_HOME/cganno_server.db"  # job-queue + results DB
 #

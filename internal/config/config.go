@@ -111,10 +111,11 @@ type Database struct {
 // printed to stdout at startup. Jobs and results persist in DB (its own SQLite
 // database, separate from the annotation cache).
 type ServerConfig struct {
-	Endpoint  string `toml:"endpoint,omitempty"`   // IP:port to listen on (e.g. "127.0.0.1:8080")
-	MasterKey string `toml:"master_key,omitempty"` // HMAC signing key for API tokens
-	Workers   int    `toml:"workers,omitempty"`    // async worker pool size (default 1)
-	DB        string `toml:"db,omitempty"`         // job-queue SQLite path (default "cganno_server.db")
+	Endpoint     string `toml:"endpoint,omitempty"`      // IP:port to listen on (e.g. "127.0.0.1:8080")
+	MasterKey    string `toml:"master_key,omitempty"`    // HMAC signing key for API tokens (required unless require_token=false)
+	RequireToken *bool  `toml:"require_token,omitempty"` // require a bearer token on /v1 (default true; false = open, tokenless public API)
+	Workers      int    `toml:"workers,omitempty"`       // async worker pool size (default 1)
+	DB           string `toml:"db,omitempty"`            // job-queue SQLite path (default "cganno_server.db")
 
 	// Large-job performance.
 	MaxChunkVariants *int `toml:"max_chunk_variants,omitempty"` // variant-count chunk size for a job (default 2000; explicit 0 disables chunking)
@@ -157,6 +158,10 @@ func (s ServerConfig) ChunkSize() int {
 	}
 	return *s.MaxChunkVariants
 }
+
+// RequireTokenForV1 reports whether the /v1 API is bearer-token authenticated
+// (nil RequireToken ⇒ true, the secure default). false serves /v1 open.
+func (s ServerConfig) RequireTokenForV1() bool { return s.RequireToken == nil || *s.RequireToken }
 
 // UIIsEnabled reports whether the browser UI is served (nil UIEnabled ⇒ true).
 func (s ServerConfig) UIIsEnabled() bool { return s.UIEnabled == nil || *s.UIEnabled }

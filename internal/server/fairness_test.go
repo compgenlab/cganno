@@ -213,6 +213,32 @@ func TestOpsEndpoints(t *testing.T) {
 	}
 }
 
+func TestRequireTokenFalseOpensV1(t *testing.T) {
+	s := testServer(t)
+	no := false
+	s.cfg.Server.RequireToken = &no
+
+	// /v1 is reachable with no Authorization header.
+	rec := httptest.NewRecorder()
+	s.routes().ServeHTTP(rec, httptest.NewRequest("GET", "/v1/jobs", nil))
+	if rec.Code != http.StatusOK {
+		t.Errorf("/v1/jobs with require_token=false = %d, want 200 (open)", rec.Code)
+	}
+	rec = httptest.NewRecorder()
+	s.routes().ServeHTTP(rec, httptest.NewRequest("GET", "/v1/annotations", nil))
+	if rec.Code != http.StatusOK {
+		t.Errorf("/v1/annotations with require_token=false = %d, want 200", rec.Code)
+	}
+
+	// Default (nil) still requires a token.
+	s.cfg.Server.RequireToken = nil
+	rec = httptest.NewRecorder()
+	s.routes().ServeHTTP(rec, httptest.NewRequest("GET", "/v1/jobs", nil))
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("/v1/jobs default = %d, want 401", rec.Code)
+	}
+}
+
 func TestUIDisabled(t *testing.T) {
 	s := testServer(t)
 	no := false

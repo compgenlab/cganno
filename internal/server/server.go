@@ -65,12 +65,16 @@ func (s *Server) Run(ctx context.Context) error {
 	s.queue.StartSweeper(ctx, ttl, sweepInterval(ttl))
 	go s.limiterGC(ctx)
 
-	token, err := MintToken(s.cfg.Server.MasterKey, time.Now().Unix())
-	if err != nil {
-		return fmt.Errorf("mint startup token: %w", err)
+	if s.cfg.Server.RequireTokenForV1() {
+		token, err := MintToken(s.cfg.Server.MasterKey, time.Now().Unix())
+		if err != nil {
+			return fmt.Errorf("mint startup token: %w", err)
+		}
+		// The startup token goes to STDOUT (so it can be captured); logs go to STDERR.
+		fmt.Fprintln(os.Stdout, token)
+	} else {
+		log.Printf("cganno server: /v1 API is OPEN (require_token=false) — no bearer token required")
 	}
-	// The startup token goes to STDOUT (so it can be captured); logs go to STDERR.
-	fmt.Fprintln(os.Stdout, token)
 	log.Printf("cganno server: snapshot %q, %d worker(s); listening on http://%s",
 		s.snap.Name, s.cfg.Server.Workers, s.cfg.Server.Endpoint)
 
@@ -118,7 +122,13 @@ func (s *Server) routes() http.Handler {
 	api.HandleFunc("GET /v1/jobs/{id}/results", s.handleJobResults)
 
 	mux := http.NewServeMux()
-	mux.Handle("/v1/", requireToken(s.cfg.Server.MasterKey, api))
+	// /v1 is bearer-token authenticated unless require_token=false (an open,
+	// tokenless public API). Throttle + fair queue + tool-gate still apply.
+	var apiHandler http.Handler = api
+	if s.cfg.Server.RequireTokenForV1() {
+		apiHandler = requireToken(s.cfg.Server.MasterKey, api)
+	}
+	mux.Handle("/v1/", apiHandler)
 
 	// Open ops endpoints (no token) — health checks and version.
 	mux.HandleFunc("GET /healthz", s.handleHealthz)
